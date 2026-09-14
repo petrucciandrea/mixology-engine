@@ -1,0 +1,17 @@
+# Artefatti locali che non devono mai entrare nell'immagine.
+# Senza questo file `COPY . .` porterebbe dentro il venv dell'host
+# (architettura potenzialmente diversa) e tutte le cache di sviluppo.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.git/
+.gitignore
+.DS_Store
+*.md
+!README.md

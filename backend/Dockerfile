@@ -26,15 +26,18 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-# Copiamo prima solo i manifest per sfruttare la cache dei layer Docker:
+# Copiamo prima i manifest per sfruttare la cache dei layer Docker:
 # `uv sync` viene ri-eseguito solo se pyproject.toml/uv.lock cambiano.
-COPY pyproject.toml ./
-RUN uv sync --no-install-project
+# `--frozen` impone il rispetto del lock: la build fallisce se il lock
+# non e' allineato al pyproject, invece di risolvere silenziosamente
+# versioni diverse da quelle testate in locale.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
 
 # Copiamo il resto del codice sorgente (montato comunque a runtime via volume
 # in dev per l'hot-reload; qui serve per build "standalone" e per CI/test).
 COPY . .
-RUN uv sync
+RUN uv sync --frozen
 
 EXPOSE 8000
 
