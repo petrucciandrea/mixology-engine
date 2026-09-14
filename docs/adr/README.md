@@ -13,3 +13,4 @@ dichiara quale sostituisce.
 | [0004](0004-dominio-puro-dto-separati.md) | Dominio in dataclass pure, DTO Pydantic solo nell'API | Accettata |
 | [0005](0005-vettore-di-sapore-a-descrittori.md) | Profilo organolettico a descrittori espliciti, non embedding | Accettata |
 | [0006](0006-volume-come-vincolo.md) | Il volume finale è un vincolo, non un obiettivo pesato | Accettata |
+| [0007](0007-matcher-similarita-e-affinita.md) | Il matcher tiene separate similarità (sostituzione) e affinità (abbinamento) | Accettata |

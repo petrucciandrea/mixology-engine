@@ -13,7 +13,7 @@ from app.domain.balance import SOUR_RATIO_LOWER_BOUND, SOUR_RATIO_UPPER_BOUND
 from app.domain.entities import Ingredient, Recipe, RecipeIngredient
 from app.domain.enums import DilutionMethod
 from app.domain.services import dilution
-from app.domain.services.balance_calculator import calculate_balance
+from app.domain.services.balance_calculator import calculate_balance, sugar_acid_ratio
 
 
 class TestDilutionModel:
@@ -148,6 +148,20 @@ class TestNegroni:
 
 
 class TestEdgeCases:
+    def test_an_immeasurably_small_acidity_counts_as_none(self) -> None:
+        """Caso trovato da Hypothesis, non immaginato a tavolino.
+
+        Un'acidità denormale (10⁻³⁰⁹) non è zero, quindi superava la
+        guardia `== 0` e faceva traboccare la divisione a infinito. Il
+        valore si propagava silenzioso fino al profilo restituito: nessuna
+        eccezione, solo un numero che non esiste. La soglia di rilevabilità
+        lo tratta per quello che è — assenza di acido.
+        """
+        assert sugar_acid_ratio(brix=50.0, acidity=2.2e-309) is None
+        assert sugar_acid_ratio(brix=50.0, acidity=0.0) is None
+        # Appena sopra la soglia il rapporto torna a esistere.
+        assert sugar_acid_ratio(brix=50.0, acidity=1e-6) == pytest.approx(5e7)
+
     def test_ratio_is_none_without_acids(
         self, white_rum: Ingredient, simple_syrup: Ingredient
     ) -> None:

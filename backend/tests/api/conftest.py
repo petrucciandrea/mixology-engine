@@ -20,16 +20,32 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.api.deps import get_session
+from app.api.deps import get_redis, get_session
 from app.core.config import get_settings
 from app.main import create_app
 
 pytestmark = pytest.mark.api
 
 API = "/api/v1"
+
+#: Indice del database Redis riservato ai test.
+#:
+#: La cache del grafo e' scritta e riletta davvero durante i test dell'API —
+#: e' proprio quel percorso che si vuole verificare — ma i test annullano le
+#: proprie scritture sul database, quindi la stessa impronta puo' ripetersi
+#: fra test diversi. Senza un database separato e svuotato, un grafo messo
+#: in cache da un test verrebbe servito al successivo, che ha una dispensa
+#: diversa: i test passerebbero o fallirebbero a seconda dell'ordine.
+TEST_REDIS_DB = 15
+
+
+def _test_redis_url() -> str:
+    base = get_settings().redis_url.rsplit("/", 1)[0]
+    return f"{base}/{TEST_REDIS_DB}"
 
 
 @pytest_asyncio.fixture
@@ -58,13 +74,35 @@ async def db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+async def redis_client() -> AsyncGenerator[Redis, None]:
+    """Client Redis per test, con il proprio pool e il proprio database.
+
+    Il pool e' per test, non condiviso, per la stessa ragione per cui lo e'
+    l'engine: pytest-asyncio apre un event loop nuovo a ogni test e le
+    connessioni restano legate al loop su cui sono nate.
+    """
+    client = Redis.from_url(_test_redis_url(), decode_responses=True)
+    await client.flushdb()
+    try:
+        yield client
+    finally:
+        await client.aclose()
+
+
+@pytest_asyncio.fixture
+async def client(
+    db_session: AsyncSession, redis_client: Redis
+) -> AsyncGenerator[AsyncClient, None]:
     app = create_app()
 
     async def override_session() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
+    async def override_redis() -> AsyncGenerator[Redis, None]:
+        yield redis_client
+
     app.dependency_overrides[get_session] = override_session
+    app.dependency_overrides[get_redis] = override_redis
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as http:

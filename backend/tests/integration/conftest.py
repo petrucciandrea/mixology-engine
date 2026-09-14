@@ -33,8 +33,10 @@ from app.core.config import get_settings
 from app.domain.entities import Ingredient, PhysicalProfile
 from app.domain.enums import IngredientCategory
 from app.domain.flavor import FlavorProfile
+from app.domain.matching import FlavorSearchRepository
 from app.domain.repositories import IngredientRepository, RecipeRepository, UnitOfWork
 from app.infrastructure.db.repositories import (
+    SqlAlchemyFlavorSearchRepository,
     SqlAlchemyIngredientRepository,
     SqlAlchemyRecipeRepository,
     SqlAlchemyUnitOfWork,
@@ -81,6 +83,11 @@ def recipe_repository(db_session: AsyncSession) -> RecipeRepository:
 @pytest.fixture
 def unit_of_work(db_session: AsyncSession) -> UnitOfWork:
     return SqlAlchemyUnitOfWork(db_session)
+
+
+@pytest.fixture
+def flavor_search(db_session: AsyncSession) -> FlavorSearchRepository:
+    return SqlAlchemyFlavorSearchRepository(db_session)
 
 
 def make_ingredient(

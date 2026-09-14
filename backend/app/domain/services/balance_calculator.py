@@ -29,6 +29,21 @@ from . import dilution
 #: sono rapporti di massa.
 WATER_DENSITY_G_ML = 1.0
 
+#: Soglia sotto la quale un'acidità è considerata assente, in % peso/volume.
+#:
+#: La guardia `acidity == 0` non basta: un valore denormale — 10⁻³⁰⁹, che il
+#: profilo fisico accetta perché è dentro [0, 10] — non è zero, supera il
+#: controllo e fa traboccare la divisione a infinito. Hypothesis ha trovato
+#: esattamente questo caso.
+#:
+#: La soglia non è un espediente numerico ma un fatto di dominio: 10⁻⁹ % w/v
+#: sono 10 nanogrammi di acido per 100 ml. Nessun titolatore lo misura e
+#: nessun palato lo percepisce, quindi un drink sotto questa soglia non ha
+#: un rapporto zuccheri/acidi "altissimo": non ne ha uno, esattamente come
+#: se l'acido non ci fosse. Il margine rispetto all'overflow è enorme —
+#: servirebbe un'acidità sotto 10⁻³⁰⁶ perché la divisione trabocchi.
+ACIDITY_DETECTION_FLOOR = 1e-9
+
 
 def total_volume_ml(items: Sequence[RecipeIngredient]) -> float:
     """V_tot = Σ V_i"""
@@ -73,13 +88,13 @@ def _ratio(numerator: float, denominator: float) -> float:
 
 
 def sugar_acid_ratio(brix: float, acidity: float) -> float | None:
-    """Brix / Acidity, o `None` quando non esistono acidi in ricetta.
+    """Brix / Acidity, o `None` quando non esistono acidi misurabili.
 
     `None` e non 0 o infinito: un drink senza acidi non ha un rapporto
     zuccheri/acidi *alto*, semplicemente non ne ha uno. Un Negroni non è
     "infinitamente dolce", è un drink che non si giudica su quest'asse.
     """
-    if acidity == 0.0:
+    if acidity < ACIDITY_DETECTION_FLOOR:
         return None
     return brix / acidity
 

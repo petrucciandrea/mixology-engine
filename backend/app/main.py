@@ -18,6 +18,7 @@ from app.api.errors import register_exception_handlers
 from app.api.routes.balancing import router as balancing_router
 from app.api.routes.health import router as health_router
 from app.api.routes.ingredients import router as ingredients_router
+from app.api.routes.matching import router as matching_router
 from app.api.routes.recipes import router as recipes_router
 from app.core.config import get_settings
 from app.infrastructure.db.session import dispose_engine
@@ -50,8 +51,9 @@ def create_app() -> FastAPI:
         description=(
             "Motore di bilanciamento scientifico per cocktail d'autore. "
             "Il solver calcola i volumi ottimali dati dei target "
-            "(ABV, Brix, acidità, rapporto zuccheri/acidi); la selezione "
-            "degli ingredienti è demandata al matcher organolettico."
+            "(ABV, Brix, acidità, rapporto zuccheri/acidi); il matcher "
+            "organolettico, separato, sceglie e suggerisce gli ingredienti "
+            "per similarità vettoriale e affinità sul grafo dei sapori."
         ),
         version="0.2.0",
         debug=settings.debug,
@@ -76,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(ingredients_router, prefix=settings.api_v1_prefix)
     app.include_router(recipes_router, prefix=settings.api_v1_prefix)
     app.include_router(balancing_router, prefix=settings.api_v1_prefix)
+    app.include_router(matching_router, prefix=settings.api_v1_prefix)
 
     @app.get("/", tags=["root"])
     async def root() -> dict[str, str]:

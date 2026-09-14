@@ -31,6 +31,13 @@ from app.application.use_cases.ingredients import (
     GetIngredientUseCase,
     ListIngredientsUseCase,
 )
+from app.application.use_cases.matching import (
+    DescribeFlavorGraphUseCase,
+    FindFlavorBridgeUseCase,
+    FindSubstitutesUseCase,
+    FlavorGraphProvider,
+    SuggestPairingsUseCase,
+)
 from app.application.use_cases.recipes import (
     CreateRecipeUseCase,
     DeleteRecipeUseCase,
@@ -38,8 +45,11 @@ from app.application.use_cases.recipes import (
     ListRecipesUseCase,
     UpdateRecipeUseCase,
 )
+from app.domain.matching import FlavorSearchRepository, GraphSnapshotCache
 from app.domain.repositories import IngredientRepository, RecipeRepository, UnitOfWork
+from app.infrastructure.cache import RedisGraphSnapshotCache
 from app.infrastructure.db.repositories import (
+    SqlAlchemyFlavorSearchRepository,
     SqlAlchemyIngredientRepository,
     SqlAlchemyRecipeRepository,
     SqlAlchemyUnitOfWork,
@@ -79,9 +89,19 @@ def get_unit_of_work(session: SessionDep) -> UnitOfWork:
     return SqlAlchemyUnitOfWork(session)
 
 
+def get_flavor_search_repository(session: SessionDep) -> FlavorSearchRepository:
+    return SqlAlchemyFlavorSearchRepository(session)
+
+
+def get_graph_cache(redis: RedisDep) -> GraphSnapshotCache:
+    return RedisGraphSnapshotCache(redis)
+
+
 IngredientRepoDep = Annotated[IngredientRepository, Depends(get_ingredient_repository)]
 RecipeRepoDep = Annotated[RecipeRepository, Depends(get_recipe_repository)]
 UnitOfWorkDep = Annotated[UnitOfWork, Depends(get_unit_of_work)]
+FlavorSearchDep = Annotated[FlavorSearchRepository, Depends(get_flavor_search_repository)]
+GraphCacheDep = Annotated[GraphSnapshotCache, Depends(get_graph_cache)]
 
 
 # --- Servizi applicativi --------------------------------------------------
@@ -163,3 +183,35 @@ def get_optimize_stored_recipe_use_case(
     recipes: RecipeRepoDep, solver: SolverDep
 ) -> OptimizeStoredRecipeUseCase:
     return OptimizeStoredRecipeUseCase(recipes, solver)
+
+
+# --- Matcher organolettico -------------------------------------------------
+
+
+def get_flavor_graph_provider(
+    flavor_search: FlavorSearchDep, recipes: RecipeRepoDep, cache: GraphCacheDep
+) -> FlavorGraphProvider:
+    return FlavorGraphProvider(flavor_search, recipes, cache)
+
+
+GraphProviderDep = Annotated[FlavorGraphProvider, Depends(get_flavor_graph_provider)]
+
+
+def get_find_substitutes_use_case(
+    ingredients: IngredientRepoDep, flavor_search: FlavorSearchDep
+) -> FindSubstitutesUseCase:
+    return FindSubstitutesUseCase(ingredients, flavor_search)
+
+
+def get_suggest_pairings_use_case(provider: GraphProviderDep) -> SuggestPairingsUseCase:
+    return SuggestPairingsUseCase(provider)
+
+
+def get_find_bridge_use_case(
+    ingredients: IngredientRepoDep, provider: GraphProviderDep
+) -> FindFlavorBridgeUseCase:
+    return FindFlavorBridgeUseCase(ingredients, provider)
+
+
+def get_describe_graph_use_case(provider: GraphProviderDep) -> DescribeFlavorGraphUseCase:
+    return DescribeFlavorGraphUseCase(provider)

@@ -75,13 +75,14 @@ strict = true
 plugins = ["pydantic.mypy"]
 exclude = ["alembic/"]
 
-# SciPy e pgvector non distribuiscono annotazioni (nessun `py.typed`).
-# L'alternativa sarebbe installare pacchetti di stub di terze parti, che
-# aggiungono una dipendenza e un disallineamento di versione da mantenere
-# per due soli punti di contatto: `scipy.optimize.minimize` in
-# `balancing_solver.py` e il tipo `Vector` nei modelli ORM. Entrambi sono
-# incapsulati dietro firme tipizzate del progetto, quindi la perdita di
-# verifica si ferma alla riga di import.
+# SciPy, pgvector e NetworkX non distribuiscono annotazioni (nessun
+# `py.typed`). L'alternativa sarebbe installare pacchetti di stub di terze
+# parti, che aggiungono dipendenze e disallineamenti di versione da
+# mantenere per pochi punti di contatto: `scipy.optimize.minimize` nel
+# solver, il tipo `Vector` nei modelli ORM, e `nx.Graph` con le sue tre
+# interrogazioni nel matcher. Tutti sono incapsulati dietro firme
+# tipizzate del progetto, quindi la perdita di verifica si ferma alla riga
+# di import.
 [[tool.mypy.overrides]]
-module = ["scipy.*", "pgvector.*"]
+module = ["scipy.*", "pgvector.*", "networkx.*"]
 ignore_missing_imports = true
