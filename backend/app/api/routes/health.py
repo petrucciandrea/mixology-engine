@@ -1,18 +1,17 @@
 """Health check "reale": verifica la connettività effettiva con DB e Redis,
-non solo che il processo FastAPI sia in piedi. Questo è ciò che rende lo
-smoke test significativo per validare l'intero stack Docker Compose.
+non solo che il processo FastAPI sia in piedi. È ciò che rende lo smoke
+test significativo per validare l'intero stack Docker Compose.
 """
 
-from typing import Annotated, Literal
+from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from typing import Literal
+
+from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
-from redis.asyncio import Redis
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.db.session import get_db
-from app.infrastructure.redis_client import get_redis
+from app.api.deps import RedisDep, SessionDep
 
 router = APIRouter(tags=["health"])
 
@@ -26,10 +25,7 @@ class HealthResponse(BaseModel):
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    redis: Annotated[Redis, Depends(get_redis)],
-) -> HealthResponse:
+async def health_check(db: SessionDep, redis: RedisDep, response: Response) -> HealthResponse:
     db_status: ComponentStatus = "connected"
     redis_status: ComponentStatus = "connected"
 
@@ -43,5 +39,14 @@ async def health_check(
     except Exception:
         redis_status = "unreachable"
 
-    overall = "ok" if db_status == "connected" and redis_status == "connected" else "degraded"
-    return HealthResponse(status=overall, database=db_status, redis=redis_status)
+    healthy = db_status == "connected" and redis_status == "connected"
+    if not healthy:
+        # 503 e non 200: un orchestratore decide se togliere l'istanza dal
+        # bilanciatore leggendo lo status code, non il corpo della risposta.
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return HealthResponse(
+        status="ok" if healthy else "degraded",
+        database=db_status,
+        redis=redis_status,
+    )
