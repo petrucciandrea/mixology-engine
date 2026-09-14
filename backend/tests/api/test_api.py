@@ -1,0 +1,385 @@
+"""Test HTTP end-to-end: routing, DTO, errori, catena completa.
+
+Coprono il percorso felice e — soprattutto — i casi di errore, che sono
+quelli in cui un'API si rivela ben fatta o no.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+import pytest
+from httpx import AsyncClient
+
+from .conftest import API, create_ingredient, daiquiri_payload
+
+pytestmark = pytest.mark.api
+
+
+class TestServiceEndpoints:
+    async def test_root_announces_the_service(self, client: AsyncClient) -> None:
+        response = await client.get("/")
+        assert response.status_code == 200
+        assert response.json()["service"] == "mixology-engine"
+
+    async def test_health_reports_every_dependency(self, client: AsyncClient) -> None:
+        response = await client.get("/health")
+        body = response.json()
+
+        assert response.status_code == 200
+        assert body == {"status": "ok", "database": "connected", "redis": "connected"}
+
+    async def test_openapi_schema_is_served(self, client: AsyncClient) -> None:
+        response = await client.get("/openapi.json")
+        assert response.status_code == 200
+        assert f"{API}/balance" in response.json()["paths"]
+
+
+class TestIngredientsApi:
+    async def test_flavor_vocabulary_is_discoverable(self, client: AsyncClient) -> None:
+        """Il client non deve conoscere i 32 descrittori a memoria."""
+        response = await client.get(f"{API}/ingredients/flavor-descriptors")
+        body = response.json()
+
+        assert response.status_code == 200
+        assert body["dimension"] == 32
+        assert len(body["descriptors"]) == 32
+        assert set(body["families"]) == {"basic_taste", "tactile", "aroma"}
+
+    async def test_creating_and_reading_back_an_ingredient(self, client: AsyncClient) -> None:
+        ingredient_id = await create_ingredient(
+            client,
+            name="Mezcal",
+            category="SPIRIT",
+            abv=0.45,
+            brix=0.0,
+            acidity=0.0,
+            density_g_ml=0.94,
+            flavor={"smoke": 0.9, "earthy": 0.6, "alcohol_heat": 0.7},
+        )
+
+        response = await client.get(f"{API}/ingredients/{ingredient_id}")
+        body = response.json()
+
+        assert response.status_code == 200
+        assert body["category"] == "SPIRIT"
+        assert body["physical_profile"]["abv"] == 0.45
+        assert body["dominant_flavors"][0] == "smoke"
+        assert body["is_active"] is True
+
+    async def test_unknown_ingredient_is_a_404_with_a_typed_error(
+        self, client: AsyncClient
+    ) -> None:
+        response = await client.get(f"{API}/ingredients/{uuid.uuid4()}")
+
+        assert response.status_code == 404
+        assert response.json()["error"]["type"] == "EntityNotFoundError"
+
+    async def test_duplicate_name_is_a_409(self, client: AsyncClient) -> None:
+        payload = {
+            "name": f"Gin Unico {uuid.uuid4().hex[:8]}",
+            "category": "SPIRIT",
+            "physical_profile": {
+                "density_g_ml": 0.94,
+                "brix": 0.0,
+                "acidity": 0.0,
+                "abv": 0.43,
+            },
+        }
+        assert (await client.post(f"{API}/ingredients", json=payload)).status_code == 201
+
+        clash = await client.post(f"{API}/ingredients", json=payload)
+
+        assert clash.status_code == 409
+        assert clash.json()["error"]["type"] == "DuplicateEntityError"
+
+    async def test_an_unknown_flavor_descriptor_is_rejected(self, client: AsyncClient) -> None:
+        """Un refuso nel vocabolario non deve passare in silenzio."""
+        response = await client.post(
+            f"{API}/ingredients",
+            json={
+                "name": f"Refuso {uuid.uuid4().hex[:8]}",
+                "category": "SPIRIT",
+                "physical_profile": {
+                    "density_g_ml": 0.94,
+                    "brix": 0.0,
+                    "acidity": 0.0,
+                    "abv": 0.43,
+                },
+                "flavor_profile": {"citrusy": 0.9},
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json()["error"]["type"] == "InvalidFlavorProfileError"
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [("abv", 40.0), ("brix", 120.0), ("acidity", 50.0), ("density_g_ml", 5.0)],
+    )
+    async def test_physically_impossible_values_are_rejected(
+        self, client: AsyncClient, field: str, value: float
+    ) -> None:
+        """`abv: 40` invece di `0.40` è l'errore più probabile su questa API."""
+        profile = {"density_g_ml": 0.94, "brix": 0.0, "acidity": 0.0, "abv": 0.43}
+        profile[field] = value
+
+        response = await client.post(
+            f"{API}/ingredients",
+            json={
+                "name": f"Impossibile {uuid.uuid4().hex[:8]}",
+                "category": "SPIRIT",
+                "physical_profile": profile,
+            },
+        )
+
+        assert response.status_code == 422
+
+    async def test_deactivating_removes_it_from_the_default_listing(
+        self, client: AsyncClient, rum_id: str
+    ) -> None:
+        deactivated = await client.delete(f"{API}/ingredients/{rum_id}")
+        assert deactivated.status_code == 200
+        assert deactivated.json()["is_active"] is False
+
+        listing = await client.get(f"{API}/ingredients", params={"limit": 200})
+        assert rum_id not in {item["id"] for item in listing.json()["items"]}
+
+        with_inactive = await client.get(
+            f"{API}/ingredients", params={"limit": 200, "include_inactive": True}
+        )
+        assert rum_id in {item["id"] for item in with_inactive.json()["items"]}
+
+    async def test_listing_is_paginated(self, client: AsyncClient, rum_id: str) -> None:
+        response = await client.get(f"{API}/ingredients", params={"limit": 1, "offset": 0})
+        body = response.json()
+
+        assert len(body["items"]) <= 1
+        assert body["limit"] == 1
+        assert body["total"] >= 1
+
+
+class TestBalanceApi:
+    async def test_calculating_a_draft_recipe_persists_nothing(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        """L'editor calcola a ogni movimento di slider: non può salvare ogni volta."""
+        before = (await client.get(f"{API}/recipes")).json()["total"]
+
+        response = await client.post(
+            f"{API}/balance", json=daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20))
+        )
+        body = response.json()
+
+        assert response.status_code == 200
+        assert body["profile"]["total_volume_ml"] == pytest.approx(110.0)
+        assert body["profile"]["abv_post"] < body["profile"]["abv_pre"]
+        assert body["recipe"]["id"].startswith("draft:")
+        assert (await client.get(f"{API}/recipes")).json()["total"] == before
+
+    async def test_the_computed_profile_matches_the_hand_calculation(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        response = await client.post(
+            f"{API}/balance", json=daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20))
+        )
+        profile = response.json()["profile"]
+
+        assert profile["pure_alcohol_ml"] == pytest.approx(24.0)
+        assert profile["total_mass_g"] == pytest.approx(112.5)
+        assert profile["sugar_acid_ratio"] == pytest.approx(7.884, abs=1e-3)
+
+    async def test_referencing_a_missing_ingredient_is_a_404(
+        self, client: AsyncClient, rum_id: str
+    ) -> None:
+        response = await client.post(
+            f"{API}/balance",
+            json={
+                "name": "Fantasma",
+                "dilution_method": "SHAKEN",
+                "ingredients": [
+                    {"ingredient_id": rum_id, "volume_ml": 60},
+                    {"ingredient_id": str(uuid.uuid4()), "volume_ml": 30},
+                ],
+            },
+        )
+
+        assert response.status_code == 404
+        assert response.json()["error"]["type"] == "EntityNotFoundError"
+
+    async def test_an_empty_recipe_is_rejected_by_the_schema(self, client: AsyncClient) -> None:
+        response = await client.post(
+            f"{API}/balance",
+            json={"name": "Vuota", "dilution_method": "SHAKEN", "ingredients": []},
+        )
+        assert response.status_code == 422
+
+    async def test_unknown_fields_are_refused(self, client: AsyncClient, rum_id: str) -> None:
+        """`extra="forbid"` intercetta i refusi nei nomi dei campi.
+
+        Senza, un client che scrive `dilutionMethod` riceverebbe un 200 e un
+        risultato calcolato con il metodo sbagliato.
+        """
+        response = await client.post(
+            f"{API}/balance",
+            json={
+                "name": "Refuso",
+                "dilution_method": "SHAKEN",
+                "ingredients": [{"ingredient_id": rum_id, "volume_ml": 60}],
+                "dilutionMethod": "STIRRED",
+            },
+        )
+        assert response.status_code == 422
+
+
+class TestOptimizeApi:
+    async def test_optimizing_reaches_the_targets_and_reports_convergence(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        response = await client.post(
+            f"{API}/optimize",
+            json={
+                "recipe": daiquiri_payload(rum_id, lime_id, syrup_id, (50, 15, 35)),
+                "target": {"abv": 0.16, "brix": 10.0, "acidity": 1.0},
+            },
+        )
+        body = response.json()
+
+        assert response.status_code == 200
+        assert body["status"] == "CONVERGED"
+        assert body["max_relative_error"] < 0.10
+        assert body["iterations"] > 0
+        assert len(body["residuals"]) == 3
+
+    async def test_the_returned_profile_belongs_to_the_returned_recipe(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        """Ciò che l'API dichiara deve essere ciò che si ottiene versando."""
+        optimized = (
+            await client.post(
+                f"{API}/optimize",
+                json={
+                    "recipe": daiquiri_payload(rum_id, lime_id, syrup_id, (50, 15, 35)),
+                    "target": {"abv": 0.16, "brix": 10.0},
+                },
+            )
+        ).json()
+
+        recomputed = await client.post(
+            f"{API}/balance",
+            json={
+                "name": optimized["recipe"]["name"],
+                "dilution_method": optimized["recipe"]["dilution_method"],
+                "ingredients": [
+                    {
+                        "ingredient_id": item["ingredient"]["id"],
+                        "volume_ml": item["volume_ml"],
+                    }
+                    for item in optimized["recipe"]["ingredients"]
+                ],
+            },
+        )
+
+        assert recomputed.json()["profile"]["abv_post"] == pytest.approx(
+            optimized["profile"]["abv_post"]
+        )
+
+    async def test_per_ingredient_bounds_are_honoured(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        response = await client.post(
+            f"{API}/optimize",
+            json={
+                "recipe": daiquiri_payload(rum_id, lime_id, syrup_id, (50, 15, 35)),
+                "target": {"abv": 0.14, "brix": 9.0},
+                "settings": {"bounds_by_ingredient": {rum_id: {"min_ml": 50.0, "max_ml": 55.0}}},
+            },
+        )
+        body = response.json()
+
+        rum_volume = next(
+            item["volume_ml"]
+            for item in body["recipe"]["ingredients"]
+            if item["ingredient"]["id"] == rum_id
+        )
+        assert 50.0 <= rum_volume <= 55.0
+
+    async def test_an_empty_target_is_rejected(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        response = await client.post(
+            f"{API}/optimize",
+            json={
+                "recipe": daiquiri_payload(rum_id, lime_id, syrup_id, (50, 15, 35)),
+                "target": {},
+            },
+        )
+        assert response.status_code == 422
+
+
+class TestRecipesApi:
+    async def test_full_lifecycle(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        created = await client.post(
+            f"{API}/recipes",
+            json={
+                **daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20)),
+                "instructions": "Shake, doppio filtro, coppetta ghiacciata.",
+            },
+        )
+        assert created.status_code == 201
+        recipe_id = created.json()["id"]
+        assert created.json()["instructions"].startswith("Shake")
+
+        fetched = await client.get(f"{API}/recipes/{recipe_id}")
+        assert fetched.status_code == 200
+        assert [item["volume_ml"] for item in fetched.json()["ingredients"]] == [60, 30, 20]
+
+        updated = await client.put(
+            f"{API}/recipes/{recipe_id}",
+            json=daiquiri_payload(rum_id, lime_id, syrup_id, (55, 27.5, 15)),
+        )
+        assert updated.status_code == 200
+        assert [item["volume_ml"] for item in updated.json()["ingredients"]] == [55, 27.5, 15]
+
+        assert (await client.delete(f"{API}/recipes/{recipe_id}")).status_code == 204
+        assert (await client.get(f"{API}/recipes/{recipe_id}")).status_code == 404
+
+    async def test_balance_of_a_stored_recipe(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        recipe_id = (
+            await client.post(
+                f"{API}/recipes", json=daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20))
+            )
+        ).json()["id"]
+
+        response = await client.get(f"{API}/recipes/{recipe_id}/balance")
+
+        assert response.status_code == 200
+        assert response.json()["profile"]["total_volume_ml"] == pytest.approx(110.0)
+
+    async def test_optimizing_a_stored_recipe_does_not_overwrite_it(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        """Ottimizzare è una consultazione, salvare è una decisione separata."""
+        recipe_id = (
+            await client.post(
+                f"{API}/recipes", json=daiquiri_payload(rum_id, lime_id, syrup_id, (50, 15, 35))
+            )
+        ).json()["id"]
+
+        optimized = await client.post(
+            f"{API}/recipes/{recipe_id}/optimize",
+            json={"target": {"abv": 0.16, "brix": 10.0}},
+        )
+        assert optimized.status_code == 200
+        assert optimized.json()["recipe"]["ingredients"][0]["volume_ml"] != 50
+
+        unchanged = await client.get(f"{API}/recipes/{recipe_id}")
+        assert [item["volume_ml"] for item in unchanged.json()["ingredients"]] == [50, 15, 35]
+
+    async def test_deleting_an_unknown_recipe_is_a_404(self, client: AsyncClient) -> None:
+        response = await client.delete(f"{API}/recipes/{uuid.uuid4()}")
+        assert response.status_code == 404

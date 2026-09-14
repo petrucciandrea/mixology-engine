@@ -46,6 +46,10 @@ package = false
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-v --strict-markers"
+markers = [
+    "integration: richiede PostgreSQL in esecuzione (rollback per test)",
+    "api: richiede l'intero stack (PostgreSQL + Redis)",
+]
 
 [tool.ruff]
 target-version = "py312"
@@ -56,8 +60,25 @@ src = ["app", "tests"]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "N"]
 ignore = ["B008"]  # FastAPI Depends() come default arg è pattern idiomatico
 
+[tool.ruff.lint.isort]
+# Senza questo, isort tratta `app` come libreria di terze parti e nei test
+# lo mescola a pytest e httpx, nascondendo la distinzione fra codice del
+# progetto e dipendenze esterne.
+known-first-party = ["app", "tests"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 exclude = ["alembic/"]
+
+# SciPy e pgvector non distribuiscono annotazioni (nessun `py.typed`).
+# L'alternativa sarebbe installare pacchetti di stub di terze parti, che
+# aggiungono una dipendenza e un disallineamento di versione da mantenere
+# per due soli punti di contatto: `scipy.optimize.minimize` in
+# `balancing_solver.py` e il tipo `Vector` nei modelli ORM. Entrambi sono
+# incapsulati dietro firme tipizzate del progetto, quindi la perdita di
+# verifica si ferma alla riga di import.
+[[tool.mypy.overrides]]
+module = ["scipy.*", "pgvector.*"]
+ignore_missing_imports = true

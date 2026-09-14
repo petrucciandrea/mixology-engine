@@ -1,26 +1,21 @@
-"""Fixture condivise per la suite di test.
+"""Fixture globali.
 
-Usiamo `httpx.ASGITransport` per parlare direttamente con l'app FastAPI
-in-process (nessun server HTTP reale necessario) — ma le dipendenze
-(DB, Redis) restano quelle vere, risolte via docker-compose network,
-perché lo scopo di questo smoke test è verificare la comunicazione
-reale tra i container.
+Volutamente minimo: questo file viene importato da **tutta** la suite,
+compresi i test di dominio. Importare qui l'applicazione FastAPI —
+com'era prima — significava che anche i test puri di dominio
+richiedevano `DATABASE_URL` e `REDIS_URL`, perche' l'import creava engine
+e connection pool. I test piu' veloci e indipendenti del progetto erano i
+piu' accoppiati all'infrastruttura.
+
+Ora ogni layer ha il proprio conftest:
+  * `tests/unit/`        — nessuna dipendenza esterna, gira ovunque;
+  * `tests/integration/` — richiede PostgreSQL;
+  * `tests/api/`         — richiede l'intero stack.
 """
 
-from collections.abc import AsyncGenerator
+from __future__ import annotations
 
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-
-from app.main import app
-
-
-@pytest_asyncio.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-        yield ac
 
 
 @pytest.fixture(scope="session")
