@@ -1,0 +1,95 @@
+name: Backend
+
+# La pipeline esegue lo stesso `make check` che gira in locale — lint,
+# type check e test — contro servizi reali. Nessun mock: i test di
+# integrazione parlano con PostgreSQL e l'estensione pgvector, che è
+# esattamente ciò che serve verificare a ogni push.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  # Un push su un branch già in coda annulla la corsa precedente: non ha
+  # senso far girare la CI su un commit che nessuno guarderà più.
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # I container e l'immagine di sviluppo sono linux/amd64: usare lo stesso
+    # runner evita che la CI verifichi un'architettura diversa da quella su
+    # cui il progetto gira.
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: mixology
+          POSTGRES_PASSWORD: mixology_ci_pw
+          POSTGRES_DB: mixology_engine
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mixology -d mixology_engine"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://mixology:mixology_ci_pw@localhost:5432/mixology_engine
+      REDIS_URL: redis://localhost:6379/0
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installa uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.4"
+          enable-cache: true
+
+      - name: Installa le dipendenze
+        # `--frozen` impone il rispetto di uv.lock: la CI deve fallire se il
+        # lock non è allineato al pyproject, non risolvere silenziosamente
+        # versioni diverse da quelle testate in locale.
+        run: uv sync --frozen
+
+      - name: Lint (Ruff)
+        run: uv run ruff check .
+
+      - name: Formattazione (Ruff)
+        run: uv run ruff format --check .
+
+      - name: Type check (MyPy strict)
+        run: uv run mypy app
+
+      - name: Migrazioni Alembic
+        # Applicare le migrazioni in CI verifica anche che siano
+        # *eseguibili*, non solo che esistano: è qui che si scopre una
+        # revisione che dimentica `CREATE EXTENSION`.
+        run: uv run alembic upgrade head
+
+      - name: Test
+        run: uv run pytest --cov=app --cov-report=term-missing
+
+      - name: Reversibilità delle migrazioni
+        # Un downgrade che non funziona è una migrazione che non si può
+        # ritirare in produzione. Meglio scoprirlo qui.
+        run: uv run alembic downgrade base

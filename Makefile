@@ -2,8 +2,9 @@
 COMPOSE := docker compose
 
 .PHONY: help init up up-build down restart logs logs-backend ps \
-        test test-cov lint lint-fix format typecheck check \
-        migrate migrate-down makemigrations \
+        test test-unit test-integration test-api test-cov \
+        lint lint-fix format typecheck check \
+        migrate migrate-down makemigrations seed \
         shell backend-shell db-shell redis-cli clean
 
 help: ## Mostra questo elenco di comandi
@@ -33,8 +34,17 @@ logs-backend: ## Segue i log del solo backend
 ps: ## Stato dei container (incluso health status)
 	$(COMPOSE) ps
 
-test: ## Esegue la suite Pytest dentro il container backend
+test: ## Esegue l'intera suite Pytest dentro il container backend
 	$(COMPOSE) exec backend uv run pytest
+
+test-unit: ## Solo i test di dominio (nessun database richiesto)
+	$(COMPOSE) exec backend uv run pytest tests/unit
+
+test-integration: ## Solo i test sui repository (richiede PostgreSQL)
+	$(COMPOSE) exec backend uv run pytest tests/integration
+
+test-api: ## Solo i test HTTP end-to-end
+	$(COMPOSE) exec backend uv run pytest tests/api
 
 test-cov: ## Esegue i test con report di coverage
 	$(COMPOSE) exec backend uv run pytest --cov=app --cov-report=term-missing
@@ -52,6 +62,9 @@ typecheck: ## Type-check statico con MyPy (strict mode)
 	$(COMPOSE) exec backend uv run mypy app
 
 check: lint typecheck test ## Pipeline completa: lint + typecheck + test
+
+seed: ## Popola il database con la dispensa e le ricette classiche (idempotente)
+	$(COMPOSE) exec backend uv run python -m scripts.seed
 
 migrate: ## Applica tutte le migrazioni Alembic pendenti (upgrade head)
 	$(COMPOSE) exec backend uv run alembic upgrade head

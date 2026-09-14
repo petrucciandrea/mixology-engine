@@ -45,7 +45,10 @@ package = false
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-v --strict-markers"
+# `--cov-fail-under` rende la copertura un vincolo e non solo una misura.
+# La soglia è deliberatamente sotto il valore attuale: serve a impedire
+# regressioni, non a inseguire il 100% scrivendo test privi di valore.
+addopts = "-v --strict-markers --cov=app --cov-report=term-missing --cov-fail-under=85"
 markers = [
     "integration: richiede PostgreSQL in esecuzione (rollback per test)",
     "api: richiede l'intero stack (PostgreSQL + Redis)",
