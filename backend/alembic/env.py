@@ -13,10 +13,13 @@ from alembic import context
 from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-# Import esplicito: registra tutti i modelli ORM su Base.metadata
-# prima che Alembic li ispezioni per l'autogenerate.
+# Import dal *package* e non dal modulo `base`: importare
+# `app.infrastructure.db` registra ogni modello ORM su `Base.metadata`
+# prima che Alembic lo ispezioni. Puntare direttamente a `db.base`
+# restituirebbe metadata vuoti, e l'autogenerate produrrebbe migrazioni
+# senza tabelle senza segnalare nulla.
 from app.core.config import get_settings
-from app.infrastructure.db.base import Base
+from app.infrastructure.db import Base
 
 config = context.config
 
@@ -45,7 +48,14 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        # Senza questa opzione Alembic ignora i cambi di tipo di colonna
+        # nell'autogenerate, che e' esattamente il genere di modifica che
+        # si dimentica di scrivere a mano.
+        compare_type=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
