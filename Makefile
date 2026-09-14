@@ -1,9 +1,10 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help init up up-build down restart logs logs-backend ps \
+.PHONY: help init up up-build down restart logs logs-backend logs-frontend ps \
         test test-unit test-integration test-api test-cov \
         lint lint-fix format typecheck check \
+        fe-lint fe-typecheck fe-build fe-shell check-frontend check-all \
         migrate migrate-down makemigrations seed \
         shell backend-shell db-shell redis-cli clean
 
@@ -30,6 +31,9 @@ logs: ## Segue i log di tutti i servizi
 
 logs-backend: ## Segue i log del solo backend
 	$(COMPOSE) logs -f backend
+
+logs-frontend: ## Segue i log del solo frontend
+	$(COMPOSE) logs -f frontend
 
 ps: ## Stato dei container (incluso health status)
 	$(COMPOSE) ps
@@ -61,7 +65,23 @@ format: ## Formatta il codice con Ruff
 typecheck: ## Type-check statico con MyPy (strict mode)
 	$(COMPOSE) exec backend uv run mypy app
 
-check: lint typecheck test ## Pipeline completa: lint + typecheck + test
+check: lint typecheck test ## Pipeline backend: lint + typecheck + test
+
+fe-lint: ## Controlla lo stile del frontend con ESLint
+	$(COMPOSE) exec frontend npm run lint
+
+fe-typecheck: ## Type-check TypeScript in modalita' strict
+	$(COMPOSE) exec frontend npm run typecheck
+
+fe-build: ## Build di produzione Next.js (verifica che compili davvero)
+	$(COMPOSE) exec frontend npm run build
+
+fe-shell: ## Apre una shell nel container frontend
+	$(COMPOSE) exec frontend bash
+
+check-frontend: fe-lint fe-typecheck fe-build ## Pipeline frontend completa
+
+check-all: check check-frontend ## Backend e frontend insieme
 
 seed: ## Popola il database con la dispensa e le ricette classiche (idempotente)
 	$(COMPOSE) exec backend uv run python -m scripts.seed

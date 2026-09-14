@@ -18,15 +18,15 @@ make init      # crea .env da .env.example
 make up        # build + avvio: PostgreSQL/pgvector, Redis, backend
 make migrate   # crea lo schema (estensione vector inclusa)
 make seed      # dispensa di 29 ingredienti + 6 classici, idempotente
-make check     # lint + type check + 194 test
+make check-all # lint + type check + 194 test, backend e frontend
 ```
 
-API su <http://localhost:8000>, Swagger su <http://localhost:8000/docs>,
-health check su <http://localhost:8000/health>.
+Studio su <http://localhost:3000>, API su <http://localhost:8000>, Swagger
+su <http://localhost:8000/docs>, health check su <http://localhost:8000/health>.
 
-Se la porta 5432 o la 8000 sono già occupate da un altro progetto, cambia
-`POSTGRES_HOST_PORT` e `BACKEND_PORT` nel `.env`: la rete interna ai
-container non ne risente.
+Se una di quelle porte è già occupata da un altro progetto, cambia
+`POSTGRES_HOST_PORT`, `BACKEND_PORT` o `FRONTEND_PORT` nel `.env`: la rete
+interna ai container non ne risente.
 
 ## Il modello
 
@@ -111,6 +111,32 @@ Il grafo è messo in cache su Redis con chiave l'impronta dei suoi ingressi:
 l'invalidazione è automatica, e una cache irraggiungibile degrada la
 latenza, mai la disponibilità.
 
+## Lo studio
+
+L'interfaccia è un banco di lavoro, non un modulo da compilare: si sceglie
+un ingrediente dalla dispensa, si muovono gli slider, e ogni misura si
+aggiorna mentre la mano è ancora sul cursore.
+
+* **Drink canvas** — il bicchiere disegnato a bande proporzionali ai volumi,
+  colorate per famiglia merceologica, con l'acqua di fusione come banda a
+  sé. Si legge la ricetta dalle proporzioni prima di leggere i nomi.
+* **Lettura del bilanciamento** — ABV finale in grande perché è il numero
+  per cui si guarda il pannello, poi Brix, acidità e alcol puro. Il rapporto
+  zuccheri/acidi è su una scala con la finestra dei sour evidenziata: il
+  numero da solo non dice nulla a chi non la ha in testa, la posizione sì.
+* **Radar aromatico** — le famiglie più presenti nella miscela, su asse
+  fisso da 0 a 1 perché due drink di intensità diversa non devono disegnare
+  la stessa forma.
+* **Solver** — si digitano i target, si legge lo stato di convergenza e il
+  residuo per obiettivo, e solo se convince si applica il dosaggio proposto.
+* **Matcher** — abbinamenti e sostituti in due schede separate, perché sono
+  meccanismi diversi. Ogni sostituto mostra i due assi separati e le
+  avvertenze su cosa cambia nel drink.
+
+Lo stato della ricetta vive in un hook (`useRecipe`) che accorpa i movimenti
+di slider prima di interrogare il backend e scarta le risposte arrivate
+fuori ordine: senza, i numeri rimbalzerebbero mentre la mano è ferma.
+
 ## Architettura
 
 Clean Architecture, con la regola di dipendenza verificabile e non solo
@@ -133,6 +159,14 @@ backend/app/
 │   ├── db/                Modelli ORM, mapper, repository, ricerca vettoriale
 │   └── cache/             Cache Redis del grafo
 └── api/             FastAPI: router, DTO Pydantic, traduzione errori
+
+frontend/src/
+├── types/           Contratto HTTP tipizzato
+├── lib/             Client API, formattazione delle misure
+├── hooks/           useRecipe: stato reattivo e chiamate accorpate
+└── components/
+    ├── ui/                Primitive (Radix + CVA, stile shadcn)
+    └── studio/            Canvas, radar, slider, pannelli solver e matcher
 ```
 
 Le decisioni architetturali, con i loro costi, sono registrate in
@@ -201,8 +235,12 @@ il codice non è cambiato, non che è corretto.
 
 Fatto: dominio, solver, matcher, casi d'uso, persistenza, API, test, CI.
 
-Da fare: il **frontend** Next.js — slider dei target, radar chart del
-profilo, esplorazione visuale del grafo dei sapori.
+Fatto anche il **frontend**: Next.js App Router, TypeScript strict,
+Tailwind v4, Recharts, primitive Radix in stile shadcn/ui.
+
+Il pezzo che manca è l'**esplorazione visuale del grafo dei sapori**: gli
+endpoint `/match/graph` e `/match/bridge` sono pronti e non hanno ancora
+una rappresentazione — è il candidato naturale per una vista D3 a rete.
 
 ## Comandi
 

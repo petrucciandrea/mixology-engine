@@ -66,6 +66,34 @@ services:
       redis:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      # Ci si ferma allo stage `deps`: in sviluppo il codice arriva dal
+      # volume montato e il server e' `next dev`, quindi la build di
+      # produzione sarebbe lavoro buttato a ogni avvio.
+      target: deps
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      # Il browser gira sulla macchina dell'utente, dove l'hostname
+      # `backend` non si risolve: deve puntare alla porta pubblicata.
+      NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-8000}
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend:/app
+      # Volume anonimo: i node_modules dell'immagine (compilati per
+      # linux/amd64) non devono essere sovrascritti da quelli dell'host.
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+    depends_on:
+      backend:
+        condition: service_started
+
 volumes:
   mixology_pg_data:
   mixology_redis_data:

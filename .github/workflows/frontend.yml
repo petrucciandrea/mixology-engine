@@ -1,0 +1,46 @@
+name: Frontend
+
+# Stessa pipeline che gira in locale con `make check-frontend`: lint, type
+# check in modalita' strict e build di produzione. La build e' parte dei
+# controlli e non un passo a parte: un progetto che passa il type check ma
+# non compila non e' verde.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Installa le dipendenze
+        # `ci` e non `install`: rispetta package-lock.json alla lettera e
+        # fallisce se e' disallineato, invece di aggiornarlo in silenzio.
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Type check (TypeScript strict)
+        run: npm run typecheck
+
+      - name: Build di produzione
+        run: npm run build
