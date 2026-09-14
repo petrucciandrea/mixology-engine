@@ -1,0 +1,67 @@
+name: mixology-engine
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mixology}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mixology_dev_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-mixology_engine}
+    ports:
+      - "5432:5432"
+    volumes:
+      - mixology_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mixology} -d ${POSTGRES_DB:-mixology_engine}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - mixology_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Override espliciti per garantire coerenza con gli hostname interni
+      # alla rete Docker Compose, indipendentemente da cosa contiene .env.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mixology}:${POSTGRES_PASSWORD:-mixology_dev_pw}@db:5432/${POSTGRES_DB:-mixology_engine}
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # Hot-reload: il codice locale sovrascrive quello copiato in build.
+      - ./backend:/app
+      # Volume anonimo per non far "vincere" l'host sull'ambiente virtuale
+      # creato da uv dentro l'immagine (evita conflitti di architettura).
+      - /app/.venv
+    command: >
+      uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  mixology_pg_data:
+  mixology_redis_data:

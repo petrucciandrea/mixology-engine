@@ -1,0 +1,41 @@
+# --- Python / Backend ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.uv/
+uv.lock.bak
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# --- Alembic (teniamo le versioni, ignoriamo solo artefatti locali) ---
+backend/alembic/versions/__pycache__/
+
+# --- Node / Frontend ---
+node_modules/
+.next/
+out/
+frontend/.turbo/
+frontend/coverage/
+
+# --- Env & Secrets ---
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# --- Docker ---
+*.pid
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+.DS_Store
+*.swp
