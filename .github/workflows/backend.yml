@@ -87,7 +87,7 @@ jobs:
         run: uv run alembic upgrade head
 
       - name: Test
-        run: uv run pytest --cov=app --cov-report=term-missing
+        run: uv run pytest --cov
 
       - name: Reversibilità delle migrazioni
         # Un downgrade che non funziona è una migrazione che non si può

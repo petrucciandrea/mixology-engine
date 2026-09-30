@@ -37,9 +37,6 @@ class Settings(BaseSettings):
     #: sviluppo; in produzione va valorizzata esplicitamente.
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    embedding_provider: str = "local"
-
 
 @lru_cache
 def get_settings() -> Settings:

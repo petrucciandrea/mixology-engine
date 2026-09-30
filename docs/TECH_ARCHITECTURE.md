@@ -27,5 +27,5 @@ mixology-engine/
 ## Decisioni Architetturali Confermate (ADR)
 1. **Solver SciPy:** Problema non-lineare vincolato risolto con `scipy.optimize.minimize(method='SLSQP')` e bounds volumetrici fissi. Il solver calcola i volumi $V_i$ dati gli ingredienti; la selezione ingredienti è demandata al Matcher vettoriale/grafo.
 2. **Concorrenza CPU-bound:** Utilizzo di `asyncio.to_thread` nei service layer di FastAPI per isolare i calcoli di SciPy dall'event loop asincrono.
-3. **pgvector & Embeddings:** Embeddings di descrizioni sensoriali strutturate (degustazione/famiglie aromatiche) per similarity search del coseno (sostituzione e pairing ingredienti).
+3. **pgvector & profilo organolettico:** Vettore a 32 descrittori espliciti (tassonomia in `domain/flavor.py`, non embedding di un modello linguistico) per la similarity search del coseno usata nella sostituzione; l'abbinamento usa il grafo delle affinità NetworkX. Vedi ADR-0005 e ADR-0007.
 4. **Database Migrations:** Adozione formale di **Alembic** con driver async (`asyncpg`) per SQLAlchemy.

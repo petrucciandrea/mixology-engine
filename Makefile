@@ -3,7 +3,7 @@ COMPOSE := docker compose
 
 .PHONY: help init up up-build down restart logs logs-backend logs-frontend ps \
         test test-unit test-integration test-api test-cov \
-        lint lint-fix format typecheck check \
+        lint lint-fix format format-check typecheck check \
         fe-lint fe-typecheck fe-build fe-shell check-frontend check-all \
         migrate migrate-down makemigrations seed \
         shell backend-shell db-shell redis-cli clean
@@ -38,8 +38,8 @@ logs-frontend: ## Segue i log del solo frontend
 ps: ## Stato dei container (incluso health status)
 	$(COMPOSE) ps
 
-test: ## Esegue l'intera suite Pytest dentro il container backend
-	$(COMPOSE) exec backend uv run pytest
+test: ## Esegue l'intera suite Pytest con la soglia di copertura
+	$(COMPOSE) exec backend uv run pytest --cov
 
 test-unit: ## Solo i test di dominio (nessun database richiesto)
 	$(COMPOSE) exec backend uv run pytest tests/unit
@@ -50,8 +50,8 @@ test-integration: ## Solo i test sui repository (richiede PostgreSQL)
 test-api: ## Solo i test HTTP end-to-end
 	$(COMPOSE) exec backend uv run pytest tests/api
 
-test-cov: ## Esegue i test con report di coverage
-	$(COMPOSE) exec backend uv run pytest --cov=app --cov-report=term-missing
+test-cov: ## Esegue i test con report di coverage HTML in backend/htmlcov
+	$(COMPOSE) exec backend uv run pytest --cov --cov-report=term-missing --cov-report=html
 
 lint: ## Controlla lo stile del codice con Ruff (nessuna modifica)
 	$(COMPOSE) exec backend uv run ruff check .
@@ -62,10 +62,13 @@ lint-fix: ## Corregge automaticamente le violazioni Ruff risolvibili
 format: ## Formatta il codice con Ruff
 	$(COMPOSE) exec backend uv run ruff format .
 
+format-check: ## Verifica la formattazione Ruff senza modificare (come in CI)
+	$(COMPOSE) exec backend uv run ruff format --check .
+
 typecheck: ## Type-check statico con MyPy (strict mode)
 	$(COMPOSE) exec backend uv run mypy app
 
-check: lint typecheck test ## Pipeline backend: lint + typecheck + test
+check: lint format-check typecheck test ## Pipeline backend: lint + formattazione + typecheck + test
 
 fe-lint: ## Controlla lo stile del frontend con ESLint
 	$(COMPOSE) exec frontend npm run lint
