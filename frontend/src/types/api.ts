@@ -105,6 +105,41 @@ export const GLASS_LABELS: Record<GlassType, string> = {
   OTHER: "Altro",
 };
 
+/**
+ * Famiglia del drink, per struttura (non per tecnica né per bicchiere).
+ * Facoltativa: un Kir non ricade in nessuna, e `null` è meglio di
+ * un'etichetta forzata.
+ */
+export type RecipeFamily =
+  | "SOUR"
+  | "SPIRIT_FORWARD"
+  | "HIGHBALL"
+  | "TROPICAL"
+  | "SPRITZ"
+  | "SPARKLING"
+  | "EMULSIFIED";
+
+export const RECIPE_FAMILIES: readonly RecipeFamily[] = [
+  "SOUR",
+  "SPIRIT_FORWARD",
+  "HIGHBALL",
+  "TROPICAL",
+  "SPRITZ",
+  "SPARKLING",
+  "EMULSIFIED",
+] as const;
+
+// I nomi delle famiglie sono termini di bar e restano in inglese.
+export const RECIPE_FAMILY_LABELS: Record<RecipeFamily, string> = {
+  SOUR: "Sour",
+  SPIRIT_FORWARD: "Spirit-Forward",
+  HIGHBALL: "Highball",
+  TROPICAL: "Tropical",
+  SPRITZ: "Spritz",
+  SPARKLING: "Sparkling",
+  EMULSIFIED: "Emulsified",
+};
+
 export type IngredientCategory =
   | "SPIRIT"
   | "LIQUEUR"
@@ -171,6 +206,7 @@ export interface RecipeInput {
   dilution_method: DilutionMethod;
   serving_ice: ServingIce;
   glass?: GlassType | null;
+  family?: RecipeFamily | null;
   ingredients: RecipeIngredientInput[];
   instructions?: string | null;
 }
@@ -186,6 +222,7 @@ export interface Recipe {
   dilution_method: DilutionMethod;
   serving_ice: ServingIce;
   glass: GlassType | null;
+  family: RecipeFamily | null;
   ingredients: RecipeIngredient[];
   instructions: string | null;
 }

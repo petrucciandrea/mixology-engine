@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.application.use_cases.balancing import BalanceResult
 from app.domain.balance import BalanceProfile, ServingProfile
 from app.domain.entities import Recipe
-from app.domain.enums import DilutionMethod, GlassType, ServingIce
+from app.domain.enums import DilutionMethod, GlassType, RecipeFamily, ServingIce
 from app.domain.services.glassware import GlassFit
 from app.domain.services.serving_dilution import MAX_CONSUMPTION_MINUTES
 
@@ -43,6 +43,7 @@ class RecipeIn(BaseModel):
     dilution_method: DilutionMethod
     serving_ice: ServingIce
     glass: GlassType | None = None
+    family: RecipeFamily | None = None
     ingredients: Annotated[list[RecipeIngredientIn], Field(min_length=1, max_length=20)]
     instructions: str | None = None
 
@@ -58,6 +59,7 @@ class RecipeOut(BaseModel):
     dilution_method: DilutionMethod
     serving_ice: ServingIce
     glass: GlassType | None = None
+    family: RecipeFamily | None = None
     ingredients: list[RecipeIngredientOut]
     instructions: str | None = None
 
@@ -69,6 +71,7 @@ class RecipeOut(BaseModel):
             dilution_method=entity.dilution_method,
             serving_ice=entity.serving_ice,
             glass=entity.glass,
+            family=entity.family,
             instructions=entity.instructions,
             ingredients=[
                 RecipeIngredientOut(

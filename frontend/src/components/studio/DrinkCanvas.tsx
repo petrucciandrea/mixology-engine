@@ -1,6 +1,7 @@
 "use client";
 
 import type { Dose } from "@/hooks/useRecipe";
+import { CATEGORY_COLORS } from "@/lib/categoryColors";
 import { GENERIC_SHAPE, levelForFraction, shapeFor, sliceOutline } from "@/lib/glassShapes";
 import { formatMl } from "@/lib/utils";
 import {
@@ -8,7 +9,6 @@ import {
   type BalanceProfile,
   type GlassFit,
   type GlassType,
-  type IngredientCategory,
 } from "@/types/api";
 
 /**
@@ -19,20 +19,6 @@ import {
  * verde-giallo, un bitter è rosso. Chi conosce il bar riconosce la ricetta
  * dalla proporzione dei colori prima di leggere i nomi.
  */
-const CATEGORY_COLORS: Record<IngredientCategory, string> = {
-  SPIRIT: "#d9a441",
-  LIQUEUR: "#e2b062",
-  FORTIFIED_WINE: "#a8573f",
-  WINE: "#8f3b52",
-  BITTER: "#c23b3b",
-  AMARO: "#7a3b2e",
-  JUICE: "#b8c44a",
-  SYRUP: "#e8d08a",
-  ACID_SOLUTION: "#cfe3a8",
-  MIXER: "#6f8f9a",
-  WATER: "#5d7f8c",
-  OTHER: "#6b7570",
-};
 
 /** L'acqua di fusione ha un colore proprio e desaturato: è l'unica banda
     che nessuno versa, e deve leggersi come diversa dalle altre. */

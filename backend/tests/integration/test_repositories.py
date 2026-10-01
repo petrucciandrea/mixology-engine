@@ -10,7 +10,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities import Recipe, RecipeIngredient
-from app.domain.enums import DilutionMethod, GlassType, IngredientCategory, ServingIce
+from app.domain.enums import (
+    DilutionMethod,
+    GlassType,
+    IngredientCategory,
+    RecipeFamily,
+    ServingIce,
+)
 from app.domain.flavor import FlavorProfile
 from app.domain.repositories import IngredientRepository, RecipeRepository, UnitOfWork
 
@@ -244,6 +250,25 @@ class TestRecipeRepository:
 
         assert loaded is not None
         assert loaded.glass is glass
+
+    @pytest.mark.parametrize("family", [None, *RecipeFamily])
+    async def test_family_survives_the_round_trip(
+        self,
+        family: RecipeFamily | None,
+        recipe_repository: RecipeRepository,
+        ingredient_repository: IngredientRepository,
+        unit_of_work: UnitOfWork,
+    ) -> None:
+        recipe = replace(
+            await self._stock_daiquiri(ingredient_repository, unit_of_work), family=family
+        )
+        await recipe_repository.add(recipe)
+        await unit_of_work.commit()
+
+        loaded = await recipe_repository.get(recipe.id)
+
+        assert loaded is not None
+        assert loaded.family is family
 
     async def test_the_pouring_order_is_preserved(
         self,

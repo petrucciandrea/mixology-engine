@@ -131,8 +131,8 @@ export function FlavorRadar({ doses }: FlavorRadarProps) {
             <PolarRadiusAxis domain={[0, 1]} tick={false} axisLine={false} />
             <Radar
               dataKey="intensity"
-              stroke="#d9a441"
-              fill="#d9a441"
+              stroke="#e8812b"
+              fill="#e8812b"
               fillOpacity={0.28}
               isAnimationActive={false}
             />

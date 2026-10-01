@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from app.domain.entities import (
@@ -10,7 +12,7 @@ from app.domain.entities import (
     Recipe,
     RecipeIngredient,
 )
-from app.domain.enums import DilutionMethod, IngredientCategory, ServingIce
+from app.domain.enums import DilutionMethod, IngredientCategory, RecipeFamily, ServingIce
 from app.domain.errors import (
     InvalidPhysicalProfileError,
     InvalidRecipeError,
@@ -128,6 +130,18 @@ class TestRecipe:
                 serving_ice=ServingIce.NONE,
                 ingredients=(RecipeIngredient(ingredient=white_rum, volume_ml=30.0),),
             )
+
+
+class TestRecipeFamily:
+    def test_the_family_is_optional(self, daiquiri: Recipe) -> None:
+        assert daiquiri.family is None
+
+    def test_a_recipe_carries_its_family(self, daiquiri: Recipe) -> None:
+        assert replace(daiquiri, family=RecipeFamily.SOUR).family is RecipeFamily.SOUR
+
+    def test_with_volumes_preserves_the_family(self, daiquiri: Recipe) -> None:
+        sour = replace(daiquiri, family=RecipeFamily.SOUR)
+        assert sour.with_volumes([50.0, 25.0, 15.0]).family is RecipeFamily.SOUR
 
 
 class TestIngredient:

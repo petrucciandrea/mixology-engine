@@ -426,6 +426,31 @@ class TestRecipesApi:
         fetched = await client.get(f"{API}/recipes/{created.json()['id']}")
         assert fetched.json()["glass"] == "COUPE"
 
+    async def test_family_is_optional_stored_and_returned(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        payload = daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20))
+
+        without = await client.post(f"{API}/recipes", json=payload)
+        assert without.status_code == 201
+        assert without.json()["family"] is None
+
+        created = await client.post(f"{API}/recipes", json={**payload, "family": "SOUR"})
+        assert created.status_code == 201
+        assert created.json()["family"] == "SOUR"
+
+        fetched = await client.get(f"{API}/recipes/{created.json()['id']}")
+        assert fetched.json()["family"] == "SOUR"
+
+    async def test_family_is_a_closed_vocabulary(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        payload = daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20))
+
+        response = await client.post(f"{API}/recipes", json={**payload, "family": "FLIP"})
+
+        assert response.status_code == 422
+
     async def test_glass_is_a_closed_vocabulary(
         self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
     ) -> None:

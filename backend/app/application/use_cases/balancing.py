@@ -17,7 +17,7 @@ from app.application.solver.balancing_solver import BalancingSolver
 from app.application.solver.models import SolverResult, SolverSettings, TargetProfile
 from app.domain.balance import BalanceProfile, ServingProfile
 from app.domain.entities import Ingredient, Recipe, RecipeIngredient
-from app.domain.enums import DilutionMethod, GlassType, ServingIce
+from app.domain.enums import DilutionMethod, GlassType, RecipeFamily, ServingIce
 from app.domain.errors import EntityNotFoundError, InvalidRecipeError
 from app.domain.repositories import IngredientRepository, RecipeRepository
 from app.domain.services.balance_calculator import calculate_balance
@@ -56,6 +56,7 @@ class DraftRecipe:
     serving_ice: ServingIce
     ingredients: tuple[DraftIngredient, ...]
     glass: GlassType | None = None
+    family: RecipeFamily | None = None
 
     def __post_init__(self) -> None:
         if not self.ingredients:
@@ -91,6 +92,7 @@ class RecipeAssembler:
             dilution_method=draft.dilution_method,
             serving_ice=draft.serving_ice,
             glass=draft.glass,
+            family=draft.family,
             ingredients=tuple(
                 RecipeIngredient(ingredient=by_id[item.ingredient_id], volume_ml=item.volume_ml)
                 for item in draft.ingredients

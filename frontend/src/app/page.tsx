@@ -145,10 +145,12 @@ export default function StudioPage() {
             method={recipe.method}
             servingIce={recipe.servingIce}
             glass={recipe.glass}
+            family={recipe.family}
             totalVolumeMl={totalVolumeMl}
             onMethodChange={recipe.setMethod}
             onServingIceChange={recipe.setServingIce}
             onGlassChange={recipe.setGlass}
+            onFamilyChange={recipe.setFamily}
             onVolumeChange={recipe.setVolume}
             onRemove={recipe.removeIngredient}
           />

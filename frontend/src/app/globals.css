@@ -7,9 +7,9 @@
  * configurazione JavaScript, e il sistema di design vive dove vivono gli
  * stili invece che accanto a essi.
  *
- * L'accento è l'oro di un distillato nel bicchiere — il colore del
+ * L'accento è l'arancio ambrato di un distillato nel bicchiere — il colore del
  * soggetto, non una scelta astratta. I due colori semantici (smeraldo e
- * rosa) sono deliberatamente lontani dall'oro sulla ruota: "questo valore è
+ * rosa) sono deliberatamente lontani dall'arancio sulla ruota: "questo valore è
  * in target" e "questo è il pulsante da premere" non devono mai potersi
  * confondere.
  */
@@ -23,9 +23,9 @@
   --color-foreground: #e8ede9;
   --color-muted: #8a9690;
 
-  --color-accent: #d9a441;
-  --color-accent-strong: #eebb5e;
-  --color-accent-soft: #2a2416;
+  --color-accent: #e8812b;
+  --color-accent-strong: #f79a4d;
+  --color-accent-soft: #2a1a10;
 
   --color-good: #34d399;
   --color-good-soft: #10261f;

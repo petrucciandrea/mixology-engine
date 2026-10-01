@@ -31,7 +31,13 @@ from dataclasses import dataclass, replace
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities import Ingredient, PhysicalProfile, Recipe, RecipeIngredient
-from app.domain.enums import DilutionMethod, GlassType, IngredientCategory, ServingIce
+from app.domain.enums import (
+    DilutionMethod,
+    GlassType,
+    IngredientCategory,
+    RecipeFamily,
+    ServingIce,
+)
 from app.domain.flavor import FlavorProfile
 from app.infrastructure.db.repositories import (
     SqlAlchemyIngredientRepository,
@@ -446,6 +452,22 @@ BAR: tuple[Spec, ...] = (
         },
     ),
     Spec(
+        "Drambuie",
+        IngredientCategory.LIQUEUR,
+        0.4,
+        35.0,
+        0.0,
+        1.1,
+        {
+            "sweet": 0.8,
+            "honey": 0.6,
+            "herbaceous": 0.4,
+            "warm_spice": 0.3,
+            "woody": 0.25,
+            "alcohol_heat": 0.45,
+        },
+    ),
+    Spec(
         "Bénédictine",
         IngredientCategory.LIQUEUR,
         0.40,
@@ -815,6 +837,15 @@ BAR: tuple[Spec, ...] = (
         {"sour": 0.65, "sweet": 0.45, "tropical_fruit": 0.95, "floral": 0.2},
     ),
     Spec(
+        "Purea di Pesca",
+        IngredientCategory.JUICE,
+        0.0,
+        12.0,
+        0.5,
+        1.05,
+        {"sweet": 0.6, "stone_fruit": 0.95, "sour": 0.2, "floral": 0.15},
+    ),
+    Spec(
         "Caffè Espresso",
         IngredientCategory.MIXER,
         0.0,
@@ -896,6 +927,42 @@ BAR: tuple[Spec, ...] = (
         6.0,
         1.02,
         {"sour": 1.0},
+    ),
+    Spec(
+        "Sciroppo di Sambuco",
+        IngredientCategory.SYRUP,
+        0.0,
+        55.0,
+        0.3,
+        1.26,
+        {"sweet": 0.9, "floral": 0.9, "citrus": 0.2},
+    ),
+    Spec(
+        "Cordial al Lime",
+        IngredientCategory.SYRUP,
+        0.0,
+        45.0,
+        1.0,
+        1.18,
+        {"sweet": 0.8, "sour": 0.5, "citrus": 0.75},
+    ),
+    Spec(
+        "Salsa Worcestershire",
+        IngredientCategory.OTHER,
+        0.0,
+        22.0,
+        2.5,
+        1.15,
+        {"umami": 0.8, "salty": 0.6, "sour": 0.4, "sweet": 0.3, "warm_spice": 0.3, "funky": 0.3},
+    ),
+    Spec(
+        "Tabasco",
+        IngredientCategory.OTHER,
+        0.0,
+        1.0,
+        3.0,
+        1.0,
+        {"pungency": 0.95, "sour": 0.5, "salty": 0.3},
     ),
     # --- Bibite e allungamenti --------------------------------------------
     Spec("Soda", IngredientCategory.MIXER, 0.0, 0.0, 0.0, 1.00, {"pungency": 0.3}),
@@ -1211,8 +1278,14 @@ CLASSICS: tuple[tuple[str, DilutionMethod, ServingIce, str, tuple[tuple[str, flo
         "Bloody Mary",
         DilutionMethod.BUILT,
         ServingIce.CUBES,
-        "Costruito su ghiaccio; salsa Worcestershire, Tabasco, sale e pepe non sono modellati.",
-        (("Vodka", 45.0), ("Succo di Pomodoro", 90.0), ("Succo di Limone", 15.0)),
+        "Costruito su ghiaccio; sale e pepe a piacere, non sono modellati.",
+        (
+            ("Vodka", 45.0),
+            ("Succo di Pomodoro", 90.0),
+            ("Succo di Limone", 15.0),
+            ("Salsa Worcestershire", 5.0),
+            ("Tabasco", 1.0),
+        ),
     ),
     (
         "Screwdriver",
@@ -1270,8 +1343,8 @@ CLASSICS: tuple[tuple[str, DilutionMethod, ServingIce, str, tuple[tuple[str, flo
         "Gimlet",
         DilutionMethod.SHAKEN,
         ServingIce.NONE,
-        "Shake, doppio filtro, coppetta, lime (qui succo fresco e sciroppo al posto del cordial).",
-        (("London Dry Gin", 60.0), ("Succo di Lime", 20.0), ("Sciroppo Semplice 1:1", 15.0)),
+        "Shake, doppio filtro, coppetta, spicchio di lime.",
+        (("London Dry Gin", 50.0), ("Cordial al Lime", 20.0)),
     ),
     (
         "Southside",
@@ -1420,7 +1493,34 @@ CLASSICS: tuple[tuple[str, DilutionMethod, ServingIce, str, tuple[tuple[str, flo
             ("Cola", 20.0),
         ),
     ),
+    (
+        "Bellini",
+        DilutionMethod.BUILT,
+        ServingIce.NONE,
+        "Purea di pesca nel flûte, completare con Prosecco e mescolare piano.",
+        (("Prosecco", 100.0), ("Purea di Pesca", 50.0)),
+    ),
+    (
+        "Hugo",
+        DilutionMethod.BUILT,
+        ServingIce.CUBES,
+        "Costruito su ghiaccio, menta e fetta di lime.",
+        (("Prosecco", 100.0), ("Sciroppo di Sambuco", 20.0), ("Soda", 30.0)),
+    ),
+    (
+        "Rusty Nail",
+        DilutionMethod.BUILT,
+        ServingIce.LARGE_CUBE,
+        "Costruito su ghiaccio grosso, scorza di limone.",
+        (("Scotch Blended", 45.0), ("Drambuie", 25.0)),
+    ),
 )
+
+
+#: Ricette del seed la cui dose è stata corretta dopo la prima versione.
+#: Il seed riallinea dosi e istruzioni solo di queste: allinearle tutte
+#: sovrascriverebbe i ribilanciamenti che l'utente ha salvato col solver.
+REVISED: frozenset[str] = frozenset({"Gimlet", "Bloody Mary"})
 
 
 async def rename_legacy(repository: SqlAlchemyIngredientRepository) -> None:
@@ -1523,6 +1623,74 @@ CLASSIC_GLASSES: dict[str, GlassType] = {
     "Kir Royale": GlassType.FLUTE,
     "French 75": GlassType.FLUTE,
     "Mint Julep": GlassType.OTHER,
+    "Bellini": GlassType.FLUTE,
+    "Hugo": GlassType.WINE,
+    "Rusty Nail": GlassType.ROCKS,
+}
+
+
+# Kir non compare: è vino bianco e cassis, senza bollicine né amaro, e la
+# famiglia è facoltativa proprio per non forzare un'etichetta falsa. Nessun
+# classico del catalogo è emulsionato (albume, panna): `EMULSIFIED` resta
+# vuota finché non entra una ricetta che lo giustifichi.
+CLASSIC_FAMILIES: dict[str, RecipeFamily] = {
+    "Daiquiri": RecipeFamily.SOUR,
+    "Margarita": RecipeFamily.SOUR,
+    "Last Word": RecipeFamily.SOUR,
+    "Whiskey Sour": RecipeFamily.SOUR,
+    "Sidecar": RecipeFamily.SOUR,
+    "Gimlet": RecipeFamily.SOUR,
+    "Southside": RecipeFamily.SOUR,
+    "Bee's Knees": RecipeFamily.SOUR,
+    "Gold Rush": RecipeFamily.SOUR,
+    "Aviation": RecipeFamily.SOUR,
+    "Corpse Reviver No. 2": RecipeFamily.SOUR,
+    "Paper Plane": RecipeFamily.SOUR,
+    "Naked and Famous": RecipeFamily.SOUR,
+    "Penicillin": RecipeFamily.SOUR,
+    "Tommy's Margarita": RecipeFamily.SOUR,
+    "Hemingway Daiquiri": RecipeFamily.SOUR,
+    "Pisco Sour": RecipeFamily.SOUR,
+    "Amaretto Sour": RecipeFamily.SOUR,
+    "Cosmopolitan": RecipeFamily.SOUR,
+    "Gin Fizz": RecipeFamily.SOUR,
+    "Caipirinha": RecipeFamily.SOUR,
+    "Negroni": RecipeFamily.SPIRIT_FORWARD,
+    "Old Fashioned": RecipeFamily.SPIRIT_FORWARD,
+    "Manhattan": RecipeFamily.SPIRIT_FORWARD,
+    "Rob Roy": RecipeFamily.SPIRIT_FORWARD,
+    "Martini": RecipeFamily.SPIRIT_FORWARD,
+    "Martinez": RecipeFamily.SPIRIT_FORWARD,
+    "Hanky Panky": RecipeFamily.SPIRIT_FORWARD,
+    "Boulevardier": RecipeFamily.SPIRIT_FORWARD,
+    "Sazerac": RecipeFamily.SPIRIT_FORWARD,
+    "Black Russian": RecipeFamily.SPIRIT_FORWARD,
+    "Rusty Nail": RecipeFamily.SPIRIT_FORWARD,
+    "Mint Julep": RecipeFamily.SPIRIT_FORWARD,
+    "Espresso Martini": RecipeFamily.SPIRIT_FORWARD,
+    "Gin Tonic": RecipeFamily.HIGHBALL,
+    "Moscow Mule": RecipeFamily.HIGHBALL,
+    "Dark 'n' Stormy": RecipeFamily.HIGHBALL,
+    "Cuba Libre": RecipeFamily.HIGHBALL,
+    "Mojito": RecipeFamily.HIGHBALL,
+    "Tom Collins": RecipeFamily.HIGHBALL,
+    "Paloma": RecipeFamily.HIGHBALL,
+    "Tequila Sunrise": RecipeFamily.HIGHBALL,
+    "Bloody Mary": RecipeFamily.HIGHBALL,
+    "Screwdriver": RecipeFamily.HIGHBALL,
+    "Sea Breeze": RecipeFamily.HIGHBALL,
+    "Garibaldi": RecipeFamily.HIGHBALL,
+    "Long Island Iced Tea": RecipeFamily.HIGHBALL,
+    "Mai Tai": RecipeFamily.TROPICAL,
+    "Jungle Bird": RecipeFamily.TROPICAL,
+    "Aperol Spritz": RecipeFamily.SPRITZ,
+    "Hugo": RecipeFamily.SPRITZ,
+    "Americano": RecipeFamily.SPRITZ,
+    "Negroni Sbagliato": RecipeFamily.SPRITZ,
+    "French 75": RecipeFamily.SPARKLING,
+    "Mimosa": RecipeFamily.SPARKLING,
+    "Kir Royale": RecipeFamily.SPARKLING,
+    "Bellini": RecipeFamily.SPARKLING,
 }
 
 
@@ -1538,15 +1706,35 @@ async def seed_recipes(session: AsyncSession, catalogue: dict[str, Ingredient]) 
             # Le ricette create prima dell'introduzione di `serving_ice`
             # hanno il valore di migrazione (`NONE`): il seed le riallinea,
             # così un database già popolato non resta con servizi sbagliati.
+            if name in REVISED:
+                await repository.save(
+                    replace(
+                        stored,
+                        instructions=instructions,
+                        ingredients=tuple(
+                            RecipeIngredient(
+                                ingredient=catalogue[ingredient_name], volume_ml=volume
+                            )
+                            for ingredient_name, volume in doses
+                        ),
+                    )
+                )
+                stored = await repository.get(stored.id) or stored
             glass = CLASSIC_GLASSES.get(name)
-            if stored.serving_ice is not serving_ice or (
-                stored.glass is None and glass is not None
+            family = CLASSIC_FAMILIES.get(name)
+            # Bicchiere e famiglia sono facoltativi: il seed li imposta solo
+            # dove mancano, così non sovrascrive una scelta fatta a mano.
+            if (
+                stored.serving_ice is not serving_ice
+                or (stored.glass is None and glass is not None)
+                or (stored.family is None and family is not None)
             ):
                 await repository.save(
                     replace(
                         stored,
                         serving_ice=serving_ice,
                         glass=stored.glass if stored.glass is not None else glass,
+                        family=stored.family if stored.family is not None else family,
                     )
                 )
                 realigned += 1
@@ -1558,6 +1746,7 @@ async def seed_recipes(session: AsyncSession, catalogue: dict[str, Ingredient]) 
                 dilution_method=method,
                 serving_ice=serving_ice,
                 glass=CLASSIC_GLASSES.get(name),
+                family=CLASSIC_FAMILIES.get(name),
                 instructions=instructions,
                 ingredients=tuple(
                     RecipeIngredient(ingredient=catalogue[ingredient_name], volume_ml=volume)
@@ -1569,7 +1758,7 @@ async def seed_recipes(session: AsyncSession, catalogue: dict[str, Ingredient]) 
 
     print(
         f"Ricette: {created} create, {len(CLASSICS) - created} già presenti "
-        f"({realigned} con ghiaccio o bicchiere riallineati)."
+        f"({realigned} con ghiaccio, bicchiere o famiglia riallineati)."
     )
 
 

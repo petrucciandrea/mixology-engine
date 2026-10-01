@@ -81,6 +81,7 @@ def recipe_to_domain(row: RecipeModel) -> Recipe:
         dilution_method=row.dilution_method,
         serving_ice=row.serving_ice,
         glass=row.glass,
+        family=row.family,
         instructions=row.instructions,
         ingredients=tuple(
             RecipeIngredient(
@@ -101,6 +102,7 @@ def recipe_to_row(entity: Recipe, row: RecipeModel | None = None) -> RecipeModel
     target.dilution_method = entity.dilution_method
     target.serving_ice = entity.serving_ice
     target.glass = entity.glass
+    target.family = entity.family
     target.instructions = entity.instructions
 
     # Il dosaggio viene sostituito per intero: `Recipe` è un aggregate, e

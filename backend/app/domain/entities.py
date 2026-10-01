@@ -16,7 +16,7 @@ import math
 from dataclasses import dataclass, replace
 from typing import Final
 
-from .enums import DilutionMethod, GlassType, IngredientCategory, ServingIce
+from .enums import DilutionMethod, GlassType, IngredientCategory, RecipeFamily, ServingIce
 from .errors import InvalidPhysicalProfileError, InvalidRecipeError, InvalidVolumeError
 from .flavor import FlavorProfile
 
@@ -125,7 +125,8 @@ class Recipe:
     `dilution_method` descrive come si prepara, `serving_ice` come si serve:
     sono indipendenti (vedi `ServingIce`). `glass` è il bicchiere di
     servizio, facoltativo: se presente, fissa un tetto al volume del drink
-    (vedi `domain/services/glassware`).
+    (vedi `domain/services/glassware`). `family` classifica il drink
+    (vedi `RecipeFamily`) ed è facoltativa: non entra in nessun calcolo.
 
     L'invariante che protegge è la coerenza del dosaggio — nessuna ricetta
     vuota, nessun ingrediente ripetuto (due dosi dello stesso ingrediente
@@ -140,6 +141,7 @@ class Recipe:
     ingredients: tuple[RecipeIngredient, ...]
     instructions: str | None = None
     glass: GlassType | None = None
+    family: RecipeFamily | None = None
 
     def __post_init__(self) -> None:
         if not self.id.strip():

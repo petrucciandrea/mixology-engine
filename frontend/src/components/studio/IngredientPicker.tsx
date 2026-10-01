@@ -1,10 +1,10 @@
 "use client";
 
-import { Plus, Search } from "lucide-react";
+import { ChevronDown, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { CATEGORY_COLORS } from "@/lib/categoryColors";
 import { cn, formatAbv } from "@/lib/utils";
 import { CATEGORY_LABELS, type Ingredient, type IngredientCategory } from "@/types/api";
 
@@ -95,41 +95,38 @@ export function IngredientPicker({
           />
         </label>
 
-        {!isLoading && grouped.length > 0 && (
-          <div role="tablist" aria-label="Famiglia" className="flex flex-wrap gap-1.5">
-            {grouped.map((group) => {
-              const isActive = group.category === activeGroup?.category;
-              const selectedCount = group.items.filter((item) =>
-                selectedIds.has(item.id),
-              ).length;
-              return (
-                <button
-                  key={group.category}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => setActiveCategory(group.category)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors",
-                    isActive
-                      ? "border-accent bg-accent-soft text-accent"
-                      : "border-line bg-surface-2 text-muted hover:text-foreground",
-                  )}
-                >
-                  {CATEGORY_LABELS[group.category]}
-                  {selectedCount > 0 && (
-                    <Badge
-                      tone="accent"
-                      className="tabular px-1 py-0"
-                      aria-label={`${selectedCount} in ricetta`}
-                    >
-                      {selectedCount}
-                    </Badge>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+        {!isLoading && grouped.length > 0 && activeGroup !== undefined && (
+          <label className="relative block">
+            <span className="sr-only">Famiglia</span>
+            <span
+              className="pointer-events-none absolute left-2.5 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
+              style={{ backgroundColor: CATEGORY_COLORS[activeGroup.category] }}
+              aria-hidden
+            />
+            <select
+              value={activeGroup.category}
+              onChange={(event) =>
+                setActiveCategory(event.target.value as IngredientCategory)
+              }
+              className="h-8 w-full appearance-none rounded-md border border-line bg-surface-2 pl-7 pr-8 text-sm focus:border-accent focus:outline-none"
+            >
+              {grouped.map((group) => {
+                const selectedCount = group.items.filter((item) =>
+                  selectedIds.has(item.id),
+                ).length;
+                return (
+                  <option key={group.category} value={group.category}>
+                    {CATEGORY_LABELS[group.category]} · {group.items.length}
+                    {selectedCount > 0 ? ` (${selectedCount} in ricetta)` : ""}
+                  </option>
+                );
+              })}
+            </select>
+            <ChevronDown
+              className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted"
+              aria-hidden
+            />
+          </label>
         )}
 
         <div className="scrollbar-slim -mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
@@ -140,7 +137,7 @@ export function IngredientPicker({
               Nessun ingrediente corrisponde a «{query}».
             </p>
           ) : (
-            <ul role="tabpanel" className="flex flex-col">
+            <ul className="flex flex-col">
               {activeGroup.items.map((ingredient) => {
                 const alreadyUsed = selectedIds.has(ingredient.id);
                 return (

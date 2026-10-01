@@ -73,6 +73,31 @@ class GlassType(str, Enum):
     OTHER = "OTHER"
 
 
+class RecipeFamily(str, Enum):
+    """Famiglia di appartenenza di un drink, nel linguaggio del bar.
+
+    È una classificazione **per struttura**, non per tecnica né per
+    bicchiere: `DilutionMethod` e `GlassType` descrivono come si prepara e
+    come si serve, la famiglia dice che *tipo* di drink è (un Daiquiri e
+    un Whiskey Sour sono entrambi Sour pur avendo servizio diverso). Per
+    questo è un campo a sé e **facoltativo**: esistono ricette che non
+    ricadono in nessuna famiglia (un Kir è vino e cassis, senza bollicine
+    né amaro), e forzarle in una produrrebbe un'etichetta falsa.
+
+    Le famiglie sono mutuamente esclusive. `SPRITZ` copre il filone
+    aperitivo (vino frizzante o bitter allungati), `SPARKLING` i drink che
+    poggiano sulle bollicine senza essere un aperitivo (French 75, Mimosa).
+    """
+
+    SOUR = "SOUR"
+    SPIRIT_FORWARD = "SPIRIT_FORWARD"
+    HIGHBALL = "HIGHBALL"
+    TROPICAL = "TROPICAL"
+    SPRITZ = "SPRITZ"
+    SPARKLING = "SPARKLING"
+    EMULSIFIED = "EMULSIFIED"
+
+
 class IngredientCategory(str, Enum):
     """Famiglia merceologica dell'ingrediente.
 

@@ -12,6 +12,7 @@ import type {
   ServingIce,
   Ingredient,
   Recipe,
+  RecipeFamily,
   RecipeInput,
 } from "@/types/api";
 
@@ -56,6 +57,9 @@ export interface UseRecipeResult {
   servingIce: ServingIce;
   /** Bicchiere di servizio; `null` = non dichiarato, nessun tetto di volume. */
   glass: GlassType | null;
+  /** Famiglia del drink; `null` = non classificata. Non entra nel calcolo,
+      ma va portata fino al salvataggio: una PUT senza famiglia la azzererebbe. */
+  family: RecipeFamily | null;
   name: string;
   /** Id della ricetta salvata da cui deriva la bozza; `null` se non è mai
       stata salvata. Decide se "Salva" crea una ricetta o aggiorna quella. */
@@ -73,6 +77,7 @@ export interface UseRecipeResult {
   setMethod: (method: DilutionMethod) => void;
   setServingIce: (servingIce: ServingIce) => void;
   setGlass: (glass: GlassType | null) => void;
+  setFamily: (family: RecipeFamily | null) => void;
   addIngredient: (ingredient: Ingredient) => void;
   removeIngredient: (ingredientId: string) => void;
   setVolume: (ingredientId: string, volumeMl: number) => void;
@@ -88,6 +93,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
   const [method, setMethod] = useState<DilutionMethod>("SHAKEN");
   const [servingIce, setServingIce] = useState<ServingIce>("NONE");
   const [glass, setGlass] = useState<GlassType | null>(null);
+  const [family, setFamily] = useState<RecipeFamily | null>(null);
   const [name, setName] = useState(initialName);
   const [recipeId, setRecipeId] = useState<string | null>(null);
 
@@ -109,12 +115,13 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
       dilution_method: method,
       serving_ice: servingIce,
       glass,
+      family,
       ingredients: doses.map((dose) => ({
         ingredient_id: dose.ingredient.id,
         volume_ml: dose.volumeMl,
       })),
     };
-  }, [doses, method, servingIce, glass, name]);
+  }, [doses, method, servingIce, glass, family, name]);
 
   useEffect(() => {
     if (recipeInput === null) {
@@ -197,6 +204,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     setMethod(recipe.dilution_method);
     setServingIce(recipe.serving_ice);
     setGlass(recipe.glass);
+    setFamily(recipe.family);
     setName(recipe.name);
     setRecipeId(recipe.id);
   }, []);
@@ -217,6 +225,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     setDoses([]);
     setServingIce("NONE");
     setGlass(null);
+    setFamily(null);
     setName(initialName);
     setRecipeId(null);
     setProfile(null);
@@ -230,6 +239,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     method,
     servingIce,
     glass,
+    family,
     name,
     recipeId,
     servingProfile,
@@ -242,6 +252,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     setMethod,
     setServingIce,
     setGlass,
+    setFamily,
     addIngredient,
     removeIngredient,
     setVolume,

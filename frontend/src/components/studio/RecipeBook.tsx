@@ -1,19 +1,18 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, formatMl } from "@/lib/utils";
 import {
   DILUTION_METHOD_LABELS,
-  DILUTION_METHODS,
   GLASS_LABELS,
-  SERVING_ICE_LABELS,
-  type DilutionMethod,
+  RECIPE_FAMILIES,
+  RECIPE_FAMILY_LABELS,
   type Recipe,
+  type RecipeFamily,
 } from "@/types/api";
 
 interface RecipeBookProps {
@@ -32,13 +31,12 @@ export function RecipeBook({
   onLoad,
   onDelete,
 }: RecipeBookProps) {
-  // null = tutte. Il filtro per metodo è l'unica tipologia che il ricettario
-  // conosce: è anche quella già mostrata come badge su ogni riga.
-  const [method, setMethod] = useState<DilutionMethod | null>(null);
+  // null = tutte. Le ricette senza famiglia compaiono solo qui: il filtro
+  // non ha una voce "non classificate" perché sarebbe un residuo, non una
+  // categoria.
+  const [family, setFamily] = useState<RecipeFamily | null>(null);
   const visible =
-    method === null
-      ? recipes
-      : recipes.filter((r) => r.dilution_method === method);
+    family === null ? recipes : recipes.filter((r) => r.family === family);
 
   return (
     <Card className="flex max-h-[18rem] min-h-0 shrink-0 flex-col">
@@ -60,60 +58,43 @@ export function RecipeBook({
           </p>
         ) : (
           <>
-            <div
-              role="tablist"
-              aria-label="Tipologia"
-              className="mb-2 flex flex-wrap gap-1.5"
-            >
-              {[null, ...DILUTION_METHODS].map((option) => {
-                const inOption =
-                  option === null
-                    ? recipes
-                    : recipes.filter((r) => r.dilution_method === option);
-                if (
-                  option !== null &&
-                  inOption.length === 0 &&
-                  option !== method
-                )
-                  return null;
-                const isSelected = option === method;
-                const hasActive = inOption.some((r) => r.id === activeId);
-                return (
-                  <button
-                    key={option ?? "ALL"}
-                    type="button"
-                    role="tab"
-                    aria-selected={isSelected}
-                    onClick={() => setMethod(option)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors",
-                      isSelected
-                        ? "border-accent bg-accent-soft text-accent"
-                        : "border-line bg-surface-2 text-muted hover:text-foreground",
-                    )}
-                  >
-                    {option === null ? "Tutti" : DILUTION_METHOD_LABELS[option]}
-                    <Badge
-                      tone={hasActive ? "accent" : "neutral"}
-                      className="tabular px-1 py-0"
-                      aria-label={
-                        hasActive
-                          ? `${inOption.length}, con la ricetta aperta`
-                          : undefined
-                      }
-                    >
-                      {inOption.length}
-                    </Badge>
-                  </button>
-                );
-              })}
-            </div>
+            <label className="relative mb-2 block">
+              <span className="sr-only">Famiglia</span>
+              <select
+                value={family ?? ""}
+                onChange={(event) =>
+                  setFamily(
+                    event.target.value === ""
+                      ? null
+                      : (event.target.value as RecipeFamily),
+                  )
+                }
+                className="h-8 w-full appearance-none rounded-md border border-line bg-surface-2 pl-2.5 pr-8 text-sm focus:border-accent focus:outline-none"
+              >
+                <option value="">Tutte le famiglie · {recipes.length}</option>
+                {RECIPE_FAMILIES.map((option) => {
+                  const count = recipes.filter(
+                    (r) => r.family === option,
+                  ).length;
+                  if (count === 0 && option !== family) return null;
+                  return (
+                    <option key={option} value={option}>
+                      {RECIPE_FAMILY_LABELS[option]} · {count}
+                    </option>
+                  );
+                })}
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted"
+                aria-hidden
+              />
+            </label>
             {visible.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted">
-                Nessuna ricetta di questa tipologia.
+                Nessuna ricetta di questa famiglia.
               </p>
             ) : (
-              <ul role="tabpanel" className="flex flex-col">
+              <ul className="flex flex-col">
                 {visible.map((recipe) => {
                   const isActive = recipe.id === activeId;
                   // Il volume pre-diluizione: è quello che si versa, e basta a
@@ -150,12 +131,9 @@ export function RecipeBook({
                             {formatMl(totalMl)} ml
                           </span>
                         </span>
-                        <span className="flex shrink-0 flex-col items-end gap-1">
-                          <Badge>{DILUTION_METHOD_LABELS[recipe.dilution_method]}</Badge>
-                          <span className="text-[0.65rem] text-muted">
-                            {recipe.glass !== null && `${GLASS_LABELS[recipe.glass]} · `}
-                            {SERVING_ICE_LABELS[recipe.serving_ice]}
-                          </span>
+                        <span className="shrink-0 text-right text-[0.65rem] text-muted">
+                          {DILUTION_METHOD_LABELS[recipe.dilution_method]}
+                          {recipe.glass !== null && ` · ${GLASS_LABELS[recipe.glass]}`}
                         </span>
                       </button>
                       <Button

@@ -2,11 +2,11 @@
 
 import { Trash2 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import type { Dose } from "@/hooks/useRecipe";
+import { CATEGORY_COLORS } from "@/lib/categoryColors";
 import { formatMl } from "@/lib/utils";
 import {
   CATEGORY_LABELS,
@@ -14,10 +14,13 @@ import {
   DILUTION_METHOD_LABELS,
   GLASS_LABELS,
   GLASS_TYPES,
+  RECIPE_FAMILIES,
+  RECIPE_FAMILY_LABELS,
   SERVING_ICES,
   SERVING_ICE_LABELS,
   type DilutionMethod,
   type GlassType,
+  type RecipeFamily,
   type ServingIce,
 } from "@/types/api";
 
@@ -35,10 +38,12 @@ interface RecipeBuilderProps {
   method: DilutionMethod;
   servingIce: ServingIce;
   glass: GlassType | null;
+  family: RecipeFamily | null;
   totalVolumeMl: number;
   onMethodChange: (method: DilutionMethod) => void;
   onServingIceChange: (servingIce: ServingIce) => void;
   onGlassChange: (glass: GlassType | null) => void;
+  onFamilyChange: (family: RecipeFamily | null) => void;
   onVolumeChange: (ingredientId: string, volumeMl: number) => void;
   onRemove: (ingredientId: string) => void;
 }
@@ -48,10 +53,12 @@ export function RecipeBuilder({
   method,
   servingIce,
   glass,
+  family,
   totalVolumeMl,
   onMethodChange,
   onServingIceChange,
   onGlassChange,
+  onFamilyChange,
   onVolumeChange,
   onRemove,
 }: RecipeBuilderProps) {
@@ -113,6 +120,34 @@ export function RecipeBuilder({
         </fieldset>
 
         <fieldset className="flex flex-col gap-2">
+          <legend className="sr-only">Famiglia</legend>
+          <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted">
+            Famiglia
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              size="sm"
+              variant={family === null ? "primary" : "secondary"}
+              onClick={() => onFamilyChange(null)}
+              aria-pressed={family === null}
+            >
+              Nessuna
+            </Button>
+            {RECIPE_FAMILIES.map((candidate) => (
+              <Button
+                key={candidate}
+                size="sm"
+                variant={candidate === family ? "primary" : "secondary"}
+                onClick={() => onFamilyChange(candidate)}
+                aria-pressed={candidate === family}
+              >
+                {RECIPE_FAMILY_LABELS[candidate]}
+              </Button>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="flex flex-col gap-2">
           <legend className="sr-only">Bicchiere</legend>
           <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted">
             Bicchiere
@@ -158,7 +193,15 @@ export function RecipeBuilder({
                       <span className="truncate text-sm font-medium">
                         {dose.ingredient.name}
                       </span>
-                      <Badge>{CATEGORY_LABELS[dose.ingredient.category]}</Badge>
+                      <span
+                        className="h-2 w-2 shrink-0 self-center rounded-full"
+                        style={{
+                          backgroundColor: CATEGORY_COLORS[dose.ingredient.category],
+                        }}
+                        title={CATEGORY_LABELS[dose.ingredient.category]}
+                        role="img"
+                        aria-label={CATEGORY_LABELS[dose.ingredient.category]}
+                      />
                     </div>
                     <div className="flex shrink-0 items-baseline gap-2">
                       <span className="tabular font-mono text-sm text-accent">
