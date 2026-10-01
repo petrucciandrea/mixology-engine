@@ -5,8 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, calculateBalance } from "@/lib/api";
 import type {
   BalanceProfile,
+  GlassFit,
+  GlassType,
+  ServingProfile,
   DilutionMethod,
+  ServingIce,
   Ingredient,
+  Recipe,
   RecipeInput,
 } from "@/types/api";
 
@@ -48,25 +53,47 @@ const DEBOUNCE_MS = 180;
 export interface UseRecipeResult {
   doses: Dose[];
   method: DilutionMethod;
+  servingIce: ServingIce;
+  /** Bicchiere di servizio; `null` = non dichiarato, nessun tetto di volume. */
+  glass: GlassType | null;
   name: string;
+  /** Id della ricetta salvata da cui deriva la bozza; `null` se non è mai
+      stata salvata. Decide se "Salva" crea una ricetta o aggiorna quella. */
+  recipeId: string | null;
+  /** Il payload pronto per il backend; `null` finché non c'è una dose. */
+  recipeInput: RecipeInput | null;
   profile: BalanceProfile | null;
+  /** Il drink dopo il ghiaccio di servizio; `null` se servito senza. */
+  servingProfile: ServingProfile | null;
+  /** Riempimento del bicchiere; `null` senza bicchiere o senza capienza. */
+  glassFit: GlassFit | null;
   error: string | null;
   isCalculating: boolean;
   setName: (name: string) => void;
   setMethod: (method: DilutionMethod) => void;
+  setServingIce: (servingIce: ServingIce) => void;
+  setGlass: (glass: GlassType | null) => void;
   addIngredient: (ingredient: Ingredient) => void;
   removeIngredient: (ingredientId: string) => void;
   setVolume: (ingredientId: string, volumeMl: number) => void;
   applyVolumes: (volumes: Record<string, number>) => void;
+  loadRecipe: (recipe: Recipe) => void;
+  markSaved: (recipe: Recipe) => void;
+  forgetRecipeId: () => void;
   reset: () => void;
 }
 
 export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
   const [doses, setDoses] = useState<Dose[]>([]);
   const [method, setMethod] = useState<DilutionMethod>("SHAKEN");
+  const [servingIce, setServingIce] = useState<ServingIce>("NONE");
+  const [glass, setGlass] = useState<GlassType | null>(null);
   const [name, setName] = useState(initialName);
+  const [recipeId, setRecipeId] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<BalanceProfile | null>(null);
+  const [servingProfile, setServingProfile] = useState<ServingProfile | null>(null);
+  const [glassFit, setGlassFit] = useState<GlassFit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
 
@@ -80,16 +107,20 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     return {
       name,
       dilution_method: method,
+      serving_ice: servingIce,
+      glass,
       ingredients: doses.map((dose) => ({
         ingredient_id: dose.ingredient.id,
         volume_ml: dose.volumeMl,
       })),
     };
-  }, [doses, method, name]);
+  }, [doses, method, servingIce, glass, name]);
 
   useEffect(() => {
     if (recipeInput === null) {
       setProfile(null);
+      setServingProfile(null);
+      setGlassFit(null);
       setError(null);
       setIsCalculating(false);
       return;
@@ -103,6 +134,8 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
         .then((response) => {
           if (requestId !== latestRequest.current) return;
           setProfile(response.profile);
+          setServingProfile(response.serving_profile);
+          setGlassFit(response.glass_fit);
           setError(null);
         })
         .catch((cause: unknown) => {
@@ -150,25 +183,72 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     );
   }, []);
 
+  /** Apre una ricetta salvata come bozza di lavoro.
+
+      L'ordine delle dosi è quello salvato, cioè l'ordine di versamento: è
+      informazione reale, e il solver assegna i volumi per posizione. */
+  const loadRecipe = useCallback((recipe: Recipe) => {
+    setDoses(
+      recipe.ingredients.map((item) => ({
+        ingredient: item.ingredient,
+        volumeMl: item.volume_ml,
+      })),
+    );
+    setMethod(recipe.dilution_method);
+    setServingIce(recipe.serving_ice);
+    setGlass(recipe.glass);
+    setName(recipe.name);
+    setRecipeId(recipe.id);
+  }, []);
+
+  /** Lega la bozza alla ricetta appena salvata: il prossimo salvataggio
+      aggiornerà quella invece di crearne un'altra. */
+  const markSaved = useCallback((recipe: Recipe) => {
+    setRecipeId(recipe.id);
+  }, []);
+
+  /** Scollega la bozza da una ricetta che non esiste più, senza toccare
+      il dosaggio a schermo: chi l'ha cancellata può ancora risalvarla. */
+  const forgetRecipeId = useCallback(() => {
+    setRecipeId(null);
+  }, []);
+
   const reset = useCallback(() => {
     setDoses([]);
+    setServingIce("NONE");
+    setGlass(null);
+    setName(initialName);
+    setRecipeId(null);
     setProfile(null);
+    setServingProfile(null);
+    setGlassFit(null);
     setError(null);
-  }, []);
+  }, [initialName]);
 
   return {
     doses,
     method,
+    servingIce,
+    glass,
     name,
+    recipeId,
+    servingProfile,
+    glassFit,
+    recipeInput,
     profile,
     error,
     isCalculating,
     setName,
     setMethod,
+    setServingIce,
+    setGlass,
     addIngredient,
     removeIngredient,
     setVolume,
     applyVolumes,
+    loadRecipe,
+    markSaved,
+    forgetRecipeId,
     reset,
   };
 }

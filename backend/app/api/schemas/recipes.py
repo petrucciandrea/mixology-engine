@@ -4,13 +4,27 @@ from __future__ import annotations
 
 from typing import Annotated
 
+from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domain.balance import BalanceProfile
+from app.application.use_cases.balancing import BalanceResult
+from app.domain.balance import BalanceProfile, ServingProfile
 from app.domain.entities import Recipe
-from app.domain.enums import DilutionMethod
+from app.domain.enums import DilutionMethod, GlassType, ServingIce
+from app.domain.services.glassware import GlassFit
+from app.domain.services.serving_dilution import MAX_CONSUMPTION_MINUTES
 
 from .ingredients import IngredientOut
+
+#: Parametro di query condiviso dagli endpoint di bilanciamento.
+ConsumptionMinutes = Annotated[
+    float,
+    Query(
+        gt=0.0,
+        le=MAX_CONSUMPTION_MINUTES,
+        description="Minuti di contatto col ghiaccio di servizio (profilo `serving_profile`)",
+    ),
+]
 
 
 class RecipeIngredientIn(BaseModel):
@@ -27,6 +41,8 @@ class RecipeIn(BaseModel):
 
     name: Annotated[str, Field(min_length=1, max_length=255)]
     dilution_method: DilutionMethod
+    serving_ice: ServingIce
+    glass: GlassType | None = None
     ingredients: Annotated[list[RecipeIngredientIn], Field(min_length=1, max_length=20)]
     instructions: str | None = None
 
@@ -40,6 +56,8 @@ class RecipeOut(BaseModel):
     id: str
     name: str
     dilution_method: DilutionMethod
+    serving_ice: ServingIce
+    glass: GlassType | None = None
     ingredients: list[RecipeIngredientOut]
     instructions: str | None = None
 
@@ -49,6 +67,8 @@ class RecipeOut(BaseModel):
             id=entity.id,
             name=entity.name,
             dilution_method=entity.dilution_method,
+            serving_ice=entity.serving_ice,
+            glass=entity.glass,
             instructions=entity.instructions,
             ingredients=[
                 RecipeIngredientOut(
@@ -122,8 +142,85 @@ class BalanceProfileOut(BaseModel):
         )
 
 
+class ServingProfileOut(BaseModel):
+    """Il drink dopo la diluizione dovuta al ghiaccio di servizio."""
+
+    consumption_minutes: float
+    initial_temperature_c: float
+    equilibrium_temperature_c: float
+    cooling_melt_water_ml: float
+    ambient_melt_water_ml: float
+    melt_water_ml: float
+    final_volume_ml: float
+    final_mass_g: float
+    total_dilution_factor: float
+    abv: float
+    abv_percent: float
+    brix: float
+    acidity: float
+
+    @classmethod
+    def from_entity(cls, profile: ServingProfile) -> ServingProfileOut:
+        return cls(
+            consumption_minutes=profile.consumption_minutes,
+            initial_temperature_c=profile.initial_temperature_c,
+            equilibrium_temperature_c=profile.equilibrium_temperature_c,
+            cooling_melt_water_ml=profile.cooling_melt_water_ml,
+            ambient_melt_water_ml=profile.ambient_melt_water_ml,
+            melt_water_ml=profile.melt_water_ml,
+            final_volume_ml=profile.final_volume_ml,
+            final_mass_g=profile.final_mass_g,
+            total_dilution_factor=profile.total_dilution_factor,
+            abv=profile.abv,
+            abv_percent=profile.abv_percent,
+            brix=profile.brix,
+            acidity=profile.acidity,
+        )
+
+
+class GlassFitOut(BaseModel):
+    """Quanto il drink riempie il suo bicchiere; `fill_ratio` > 1 = trabocca."""
+
+    capacity_ml: float
+    max_volume_ml: float
+    volume_ml: float
+    fill_ratio: float
+    overflows: bool
+
+    @classmethod
+    def from_entity(cls, fit: GlassFit) -> GlassFitOut:
+        return cls(
+            capacity_ml=fit.capacity_ml,
+            max_volume_ml=fit.max_volume_ml,
+            volume_ml=fit.volume_ml,
+            fill_ratio=fit.fill_ratio,
+            overflows=fit.overflows,
+        )
+
+
 class BalanceOut(BaseModel):
-    """Risposta del calcolo: la ricetta risolta e il suo profilo."""
+    """Risposta del calcolo: la ricetta risolta e i suoi profili.
+
+    `serving_profile` è `null` per le ricette servite senza ghiaccio,
+    `glass_fit` per quelle senza bicchiere (o con bicchiere senza capienza).
+    """
 
     recipe: RecipeOut
     profile: BalanceProfileOut
+    serving_profile: ServingProfileOut | None = None
+    glass_fit: GlassFitOut | None = None
+
+    @classmethod
+    def from_result(cls, result: BalanceResult) -> BalanceOut:
+        return cls(
+            recipe=RecipeOut.from_entity(result.recipe),
+            profile=BalanceProfileOut.from_entity(result.profile),
+            serving_profile=(
+                ServingProfileOut.from_entity(result.serving)
+                if result.serving is not None
+                else None
+            ),
+            glass_fit=(
+                GlassFitOut.from_entity(result.glass_fit) if result.glass_fit is not None else None
+            ),
+        )

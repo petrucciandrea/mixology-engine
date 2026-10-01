@@ -1,8 +1,15 @@
 "use client";
 
 import type { Dose } from "@/hooks/useRecipe";
+import { GENERIC_SHAPE, levelForFraction, shapeFor, sliceOutline } from "@/lib/glassShapes";
 import { formatMl } from "@/lib/utils";
-import type { BalanceProfile, IngredientCategory } from "@/types/api";
+import {
+  GLASS_LABELS,
+  type BalanceProfile,
+  type GlassFit,
+  type GlassType,
+  type IngredientCategory,
+} from "@/types/api";
 
 /**
  * Il drink come volume, non come elenco.
@@ -31,15 +38,17 @@ const CATEGORY_COLORS: Record<IngredientCategory, string> = {
     che nessuno versa, e deve leggersi come diversa dalle altre. */
 const DILUTION_COLOR = "#2f4048";
 
-const GLASS_HEIGHT = 190;
-const GLASS_TOP_WIDTH = 150;
-const GLASS_BOTTOM_WIDTH = 96;
 const VIEWBOX_WIDTH = 190;
 const VIEWBOX_HEIGHT = 238;
+/** Dove poggia il piede (o il fondo, se non c'è stelo). */
+const BASELINE_Y = 226;
+const OUTLINE = "#3a4742";
 
 interface DrinkCanvasProps {
   doses: Dose[];
   profile: BalanceProfile | null;
+  glass: GlassType | null;
+  glassFit: GlassFit | null;
 }
 
 interface Band {
@@ -49,7 +58,7 @@ interface Band {
   color: string;
 }
 
-export function DrinkCanvas({ doses, profile }: DrinkCanvasProps) {
+export function DrinkCanvas({ doses, profile, glass, glassFit }: DrinkCanvasProps) {
   const bands: Band[] = doses.map((dose) => ({
     key: dose.ingredient.id,
     label: dose.ingredient.name,
@@ -77,34 +86,35 @@ export function DrinkCanvas({ doses, profile }: DrinkCanvasProps) {
     );
   }
 
-  // Le bande si impilano dal fondo: si disegnano in ordine inverso, come si
-  // versa. `offset` accumula l'altezza già occupata.
-  let offset = 0;
-  const geometry = bands.map((band) => {
-    const height = (band.volumeMl / totalMl) * GLASS_HEIGHT;
-    const y = VIEWBOX_HEIGHT - 24 - offset - height;
-    offset += height;
-    return { band, y, height };
-  });
+  // Con un bicchiere dalla capienza nota il disegno è in scala: il liquido
+  // sale fin dove il suo volume arriva, dentro la sagoma vera del vetro.
+  // Senza (nessun bicchiere, o "altro") si ripiega sul bicchiere generico
+  // riempito per intero, dove le bande mostrano solo le proporzioni.
+  const sized = glass !== null && glassFit !== null;
+  const shape = sized ? shapeFor(glass) : GENERIC_SHAPE;
+  const capacityMl = sized ? glassFit.capacity_ml : totalMl;
+  const overflows = sized && totalMl > capacityMl;
+  // Se trabocca, il liquido si ferma al bordo e le bande si riscalano: il
+  // disegno non può mostrare più vetro di quello che c'è.
+  const volumeScale = overflows ? capacityMl / totalMl : 1;
 
   const centre = VIEWBOX_WIDTH / 2;
-  const base = VIEWBOX_HEIGHT - 24;
+  const bowlBottom = BASELINE_Y - shape.stemPx;
 
-  /** Il bicchiere è rastremato: la larghezza a una certa altezza si
-      interpola fra fondo e bocca, così le bande seguono davvero il profilo
-      del vetro invece di essere rettangoli sovrapposti a un disegno. */
-  const widthAt = (y: number): number => {
-    const progress = (base - y) / GLASS_HEIGHT;
-    return GLASS_BOTTOM_WIDTH + (GLASS_TOP_WIDTH - GLASS_BOTTOM_WIDTH) * progress;
-  };
+  // Le bande si impilano dal fondo: `poured` accumula il volume già sotto.
+  let poured = 0;
+  const geometry = bands.map((band) => {
+    const from = levelForFraction(shape, (poured * volumeScale) / capacityMl);
+    poured += band.volumeMl;
+    const to = levelForFraction(shape, (poured * volumeScale) / capacityMl);
+    return { band, path: sliceOutline(shape, from, to, centre, bowlBottom) };
+  });
 
-  const glassPath = [
-    `M ${centre - GLASS_BOTTOM_WIDTH / 2} ${base}`,
-    `L ${centre - GLASS_TOP_WIDTH / 2} ${base - GLASS_HEIGHT}`,
-    `L ${centre + GLASS_TOP_WIDTH / 2} ${base - GLASS_HEIGHT}`,
-    `L ${centre + GLASS_BOTTOM_WIDTH / 2} ${base}`,
-    "Z",
-  ].join(" ");
+  const glassPath = sliceOutline(shape, 0, 1, centre, bowlBottom);
+  const maxLevel = sized ? levelForFraction(shape, glassFit.max_volume_ml / capacityMl) : null;
+  const maxY = maxLevel === null ? 0 : bowlBottom - maxLevel * shape.heightPx;
+  const maxHalf = maxLevel === null ? 0 : (shape.width(maxLevel) * shape.widthPx) / 2;
+  const stroke = overflows ? "#f87171" : OUTLINE;
 
   return (
     <div className="flex flex-col gap-3">
@@ -112,7 +122,7 @@ export function DrinkCanvas({ doses, profile }: DrinkCanvasProps) {
         viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
         className="mx-auto h-auto w-full max-w-[220px]"
         role="img"
-        aria-label={`Composizione del drink, ${formatMl(totalMl)} ml totali`}
+        aria-label={`Composizione del drink${glass !== null ? ` in ${GLASS_LABELS[glass]}` : ""}, ${formatMl(totalMl)} ml totali`}
       >
         <defs>
           <clipPath id="glass-clip">
@@ -121,47 +131,63 @@ export function DrinkCanvas({ doses, profile }: DrinkCanvasProps) {
         </defs>
 
         <g clipPath="url(#glass-clip)">
-          {geometry.map(({ band, y, height }) => {
-            const topWidth = widthAt(y);
-            const bottomWidth = widthAt(y + height);
-            return (
-              <path
-                key={band.key}
-                d={[
-                  `M ${centre - bottomWidth / 2} ${y + height}`,
-                  `L ${centre - topWidth / 2} ${y}`,
-                  `L ${centre + topWidth / 2} ${y}`,
-                  `L ${centre + bottomWidth / 2} ${y + height}`,
-                  "Z",
-                ].join(" ")}
-                fill={band.color}
-                fillOpacity={band.key === "__dilution" ? 0.65 : 0.9}
-              />
-            );
-          })}
+          {geometry.map(({ band, path }) => (
+            <path
+              key={band.key}
+              d={path}
+              fill={band.color}
+              fillOpacity={band.key === "__dilution" ? 0.65 : 0.9}
+            />
+          ))}
         </g>
 
-        <path d={glassPath} fill="none" stroke="#3a4742" strokeWidth={1.5} />
-        {/* Stelo e base: bastano a far leggere la forma come un bicchiere
-            invece che come un grafico a barre ruotato. */}
-        <line
-          x1={centre}
-          y1={base}
-          x2={centre}
-          y2={base + 14}
-          stroke="#3a4742"
-          strokeWidth={1.5}
-        />
-        <line
-          x1={centre - 28}
-          y1={base + 16}
-          x2={centre + 28}
-          y2={base + 16}
-          stroke="#3a4742"
-          strokeWidth={1.5}
-          strokeLinecap="round"
-        />
+        <path d={glassPath} fill="none" stroke={stroke} strokeWidth={1.5} />
+
+        {shape.stemPx > 0 && (
+          <>
+            <line
+              x1={centre}
+              y1={bowlBottom}
+              x2={centre}
+              y2={BASELINE_Y}
+              stroke={OUTLINE}
+              strokeWidth={1.5}
+            />
+            <line
+              x1={centre - shape.footPx / 2}
+              y1={BASELINE_Y}
+              x2={centre + shape.footPx / 2}
+              y2={BASELINE_Y}
+              stroke={OUTLINE}
+              strokeWidth={1.5}
+              strokeLinecap="round"
+            />
+          </>
+        )}
+
+        {/* Il massimo che il bicchiere ammette (bordo libero e ghiaccio
+            inclusi): il tetto che il solver rispetta, non il bordo. */}
+        {sized && (
+          <line
+            x1={centre - maxHalf}
+            y1={maxY}
+            x2={centre + maxHalf}
+            y2={maxY}
+            stroke="#34d399"
+            strokeWidth={1}
+            strokeDasharray="3 3"
+          >
+            <title>Volume massimo ammesso: {formatMl(glassFit.max_volume_ml)} ml</title>
+          </line>
+        )}
       </svg>
+
+      {sized && glass !== null && (
+        <p className="tabular text-center font-mono text-[0.68rem] text-muted">
+          {GLASS_LABELS[glass]} · {formatMl(glassFit.capacity_ml)} ml a filo
+          {overflows && <span className="ml-1 text-alert">· trabocca</span>}
+        </p>
+      )}
 
       <ul className="flex flex-col gap-1">
         {bands.map((band) => (

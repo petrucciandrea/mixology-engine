@@ -17,20 +17,8 @@ scegli la seconda e spiega il perché.
 Mac Intel x86_64. Ogni comando gira nei container, **mai sull'host**: niente
 `pip install`, `uv sync`, `npm install` o `pytest` locali. Usa i target del
 `Makefile` o `docker compose exec backend|frontend ...`. Immagini e servizi
-dichiarati `linux/amd64`.
-
-```bash
-make init && make up && make migrate && make seed   # primo avvio
-make test-unit          # dominio + solver + matcher, nessuna dipendenza esterna
-make test-integration   # repository, PostgreSQL reale (rollback per test)
-make test-api           # HTTP end-to-end via ASGITransport, PostgreSQL + Redis
-make check              # backend: ruff check + ruff format --check + mypy strict + pytest --cov
-make check-frontend     # eslint + tsc --noEmit + next build
-make check-all          # entrambi
-make format             # ruff format (applica la formattazione)
-make makemigrations m="messaggio"   # Alembic autogenerate
-make help               # tutto il resto
-```
+dichiarati `linux/amd64`. `make help` elenca tutti i target; prima di
+dichiarare finito: `make check-all`.
 
 Test singolo: `docker compose exec backend uv run pytest tests/unit/test_flavor.py::test_nome -x`.
 La copertura si attiva solo con `--cov` (`make test`, `make test-cov`, CI) e
@@ -135,23 +123,10 @@ dosatore e **ricalcola il profilo sui volumi arrotondati**.
   solo la sessione tramite `dependency_overrides`; Redis dei test sul db 15.
 - Marker `integration` e `api` dichiarati con `--strict-markers`.
 
-## Frontend (`frontend/src/`)
+## Frontend
 
-Next.js 15 App Router, React 19, TypeScript strict (`noUncheckedIndexedAccess`),
-Tailwind v4, Recharts, primitive Radix in stile shadcn (`components/ui/`).
-
-- `types/api.ts`: contratto HTTP **scritto a mano** (non generato), con nomi e
-  commenti di dominio. Un cambio di DTO sul backend va riportato qui.
-- `lib/api.ts`: unico punto che conosce la rete; gli errori diventano
-  `ApiError` con `type` e `message` dal formato `{error: {type, message}}`.
-- `hooks/useRecipe.ts`: stato della ricetta, debounce degli slider, scarto
-  delle risposte fuori ordine.
-- `components/studio/`: canvas, radar, pannelli solver e matcher.
-- Il browser raggiunge il backend via `NEXT_PUBLIC_API_URL` (porta
-  pubblicata), non l'hostname `backend`.
-
-Prossimo pezzo aperto: vista a rete del grafo dei sapori (D3) sopra
-`/match/graph` e `/match/bridge`, già pronti.
+Convenzioni in `frontend/CLAUDE.md`. Un cambio di DTO sul backend va
+riportato a mano in `frontend/src/types/api.ts`.
 
 ## Git e CI
 
@@ -159,8 +134,7 @@ Prossimo pezzo aperto: vista a rete del grafo dei sapori (D3) sopra
 - Commit convenzionali con soggetto in italiano:
   `feat(matching): ...`, `fix(infra): ...`, `refactor(domain): ...`,
   `test: ...`, `chore: ...`, `build: ...`.
-- La CI (`.github/workflows/`) esegue ruff check + ruff format --check +
-  mypy + migrazioni + pytest + downgrade sul backend, eslint + tsc + build
-  sul frontend. Prima di dichiarare un lavoro finito: `make check-all`.
+- Prima di dichiarare un lavoro finito: `make check-all` (stessi controlli
+  della CI).
 - `uv.lock` e `package-lock.json` sono vincolanti (`--frozen`, `npm ci`):
   nuove dipendenze si aggiungono dal container e si committa il lock.

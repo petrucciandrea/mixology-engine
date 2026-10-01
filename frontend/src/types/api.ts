@@ -27,6 +27,84 @@ export const DILUTION_METHOD_LABELS: Record<DilutionMethod, string> = {
   BUILT: "Costruito",
 };
 
+/**
+ * Ghiaccio nel bicchiere di servizio. Indipendente dalla tecnica: un
+ * Daiquiri è shakerato e servito senza ghiaccio, un Whiskey Sour è
+ * shakerato e servito su cubetti. `NONE` è "servito senza ghiaccio".
+ */
+export type ServingIce = "NONE" | "CUBES" | "LARGE_CUBE" | "CRUSHED";
+
+export const SERVING_ICES: readonly ServingIce[] = [
+  "NONE",
+  "CUBES",
+  "LARGE_CUBE",
+  "CRUSHED",
+] as const;
+
+export const SERVING_ICE_LABELS: Record<ServingIce, string> = {
+  NONE: "Senza ghiaccio",
+  CUBES: "Cubetti",
+  LARGE_CUBE: "Ghiaccio grosso",
+  CRUSHED: "Tritato",
+};
+
+/**
+ * Bicchiere di servizio. Facoltativo: una ricetta può non dichiararlo, e
+ * in quel caso non c'è un tetto al volume. `OTHER` non ha capienza nota.
+ */
+export type GlassType =
+  | "COUPE"
+  | "MARTINI"
+  | "NICK_AND_NORA"
+  | "ROCKS"
+  | "DOUBLE_ROCKS"
+  | "HIGHBALL"
+  | "COLLINS"
+  | "FLUTE"
+  | "WINE"
+  | "BALLOON"
+  | "COPPER_MUG"
+  | "TIKI"
+  | "HURRICANE"
+  | "SHOT"
+  | "OTHER";
+
+export const GLASS_TYPES: readonly GlassType[] = [
+  "COUPE",
+  "MARTINI",
+  "NICK_AND_NORA",
+  "ROCKS",
+  "DOUBLE_ROCKS",
+  "HIGHBALL",
+  "COLLINS",
+  "FLUTE",
+  "WINE",
+  "BALLOON",
+  "COPPER_MUG",
+  "TIKI",
+  "HURRICANE",
+  "SHOT",
+  "OTHER",
+] as const;
+
+export const GLASS_LABELS: Record<GlassType, string> = {
+  COUPE: "Coppa",
+  MARTINI: "Coppa martini",
+  NICK_AND_NORA: "Nick & Nora",
+  ROCKS: "Tumbler basso",
+  DOUBLE_ROCKS: "Doppio tumbler",
+  HIGHBALL: "Highball",
+  COLLINS: "Collins",
+  FLUTE: "Flûte",
+  WINE: "Calice",
+  BALLOON: "Balloon",
+  COPPER_MUG: "Tazza di rame",
+  TIKI: "Tiki mug",
+  HURRICANE: "Hurricane",
+  SHOT: "Bicchierino",
+  OTHER: "Altro",
+};
+
 export type IngredientCategory =
   | "SPIRIT"
   | "LIQUEUR"
@@ -91,6 +169,8 @@ export interface RecipeIngredientInput {
 export interface RecipeInput {
   name: string;
   dilution_method: DilutionMethod;
+  serving_ice: ServingIce;
+  glass?: GlassType | null;
   ingredients: RecipeIngredientInput[];
   instructions?: string | null;
 }
@@ -104,6 +184,8 @@ export interface Recipe {
   id: string;
   name: string;
   dilution_method: DilutionMethod;
+  serving_ice: ServingIce;
+  glass: GlassType | null;
   ingredients: RecipeIngredient[];
   instructions: string | null;
 }
@@ -138,9 +220,43 @@ export interface BalanceProfile {
   is_balanced_sour: boolean;
 }
 
+/**
+ * Il drink dopo la diluizione dovuta al ghiaccio nel bicchiere, a
+ * `consumption_minutes` dal servizio. Distinto da `BalanceProfile`, che
+ * descrive il drink appena servito.
+ */
+export interface ServingProfile {
+  consumption_minutes: number;
+  initial_temperature_c: number;
+  equilibrium_temperature_c: number;
+  cooling_melt_water_ml: number;
+  ambient_melt_water_ml: number;
+  melt_water_ml: number;
+  final_volume_ml: number;
+  final_mass_g: number;
+  total_dilution_factor: number;
+  abv: number;
+  abv_percent: number;
+  brix: number;
+  acidity: number;
+}
+
+/** Quanto il drink riempie il bicchiere; `fill_ratio` oltre 1 = trabocca. */
+export interface GlassFit {
+  capacity_ml: number;
+  max_volume_ml: number;
+  volume_ml: number;
+  fill_ratio: number;
+  overflows: boolean;
+}
+
 export interface BalanceResponse {
   recipe: Recipe;
   profile: BalanceProfile;
+  /** `null` per le ricette servite senza ghiaccio. */
+  serving_profile: ServingProfile | null;
+  /** `null` senza bicchiere, o con un bicchiere senza capienza nota. */
+  glass_fit: GlassFit | null;
 }
 
 export interface TargetProfileInput {

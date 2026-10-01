@@ -14,6 +14,7 @@ import type {
   IngredientCategory,
   Page,
   PairingSuggestion,
+  Recipe,
   RecipeInput,
   SolverResult,
   SolverSettingsInput,
@@ -125,6 +126,40 @@ export function listIngredients(options?: {
 
 export function getFlavorDescriptors(): Promise<FlavorDescriptors> {
   return request<FlavorDescriptors>("/ingredients/flavor-descriptors");
+}
+
+// --- Ricettario -------------------------------------------------------------
+
+/** Il default è il massimo accettato dal backend: il ricettario di un bar
+    sta in una pagina, e paginare un elenco di poche decine di voci
+    aggiungerebbe solo clic. */
+export function listRecipes(options?: {
+  limit?: number;
+  offset?: number;
+}): Promise<Page<Recipe>> {
+  const params = new URLSearchParams({
+    limit: String(options?.limit ?? 200),
+    offset: String(options?.offset ?? 0),
+  });
+  return request<Page<Recipe>>(`/recipes?${params.toString()}`);
+}
+
+export function createRecipe(recipe: RecipeInput): Promise<Recipe> {
+  return request<Recipe>("/recipes", {
+    method: "POST",
+    body: JSON.stringify(recipe),
+  });
+}
+
+export function updateRecipe(recipeId: string, recipe: RecipeInput): Promise<Recipe> {
+  return request<Recipe>(`/recipes/${encodeURIComponent(recipeId)}`, {
+    method: "PUT",
+    body: JSON.stringify(recipe),
+  });
+}
+
+export function deleteRecipe(recipeId: string): Promise<void> {
+  return request<void>(`/recipes/${encodeURIComponent(recipeId)}`, { method: "DELETE" });
 }
 
 // --- Bilanciamento ----------------------------------------------------------

@@ -63,3 +63,42 @@ class BalanceProfile:
         if self.sugar_acid_ratio is None:
             return False
         return SOUR_RATIO_LOWER_BOUND <= self.sugar_acid_ratio <= SOUR_RATIO_UPPER_BOUND
+
+
+@dataclass(frozen=True, slots=True)
+class ServingProfile:
+    """Il drink dopo la diluizione dovuta al ghiaccio nel bicchiere.
+
+    È un profilo **separato** dal `BalanceProfile`: quello descrive il
+    drink appena servito (ed è su di esso che lavora il solver), questo lo
+    stesso drink dopo `consumption_minutes` di contatto con il ghiaccio di
+    servizio. Tenerli distinti evita che un'ipotesi sul tempo di consumo
+    sposti i target di bilanciamento.
+
+    Le grandezze intermedie (temperatura, acqua da raffreddamento e da
+    calore ambiente) ci sono per lo stesso motivo del `BalanceProfile`:
+    rendere il calcolo verificabile a mano.
+    """
+
+    consumption_minutes: float
+
+    # --- Termodinamica ---
+    initial_temperature_c: float
+    equilibrium_temperature_c: float
+
+    # --- Acqua di fusione aggiunta dal ghiaccio di servizio ---
+    cooling_melt_water_ml: float
+    ambient_melt_water_ml: float
+    melt_water_ml: float
+
+    # --- Il drink a fine consumo ---
+    final_volume_ml: float
+    final_mass_g: float
+    total_dilution_factor: float
+    abv: float
+    brix: float
+    acidity: float
+
+    @property
+    def abv_percent(self) -> float:
+        return self.abv * 100.0

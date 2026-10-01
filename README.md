@@ -95,7 +95,7 @@ limone a chi ha già il lime.
 ```
 Abbinamenti per Gin + Vermouth Rosso
   Succo di Lime       0.0722  — compare insieme a Gin in ricette esistenti (citrus, herbaceous)
-  Bitter Rosso        0.0634  — compare insieme a Vermouth Rosso in ricette esistenti
+  Campari             0.0634  — compare insieme a Vermouth Rosso in ricette esistenti
   Chartreuse Verde    0.0512  — compare insieme a Gin in ricette esistenti (herbaceous)
 ```
 

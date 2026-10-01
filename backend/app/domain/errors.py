@@ -25,6 +25,10 @@ class InvalidVolumeError(DomainError):
     """Un volume non è strettamente positivo."""
 
 
+class InvalidServingConditionsError(DomainError):
+    """Le condizioni di servizio (es. tempo di consumo) non sono fisicamente valide."""
+
+
 class InvalidRecipeError(DomainError):
     """La ricetta è strutturalmente invalida (vuota, o con duplicati)."""
 

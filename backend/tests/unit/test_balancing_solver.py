@@ -9,6 +9,8 @@ l'arrotondamento applicato senza ricalcolare il profilo.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from app.application.solver.balancing_solver import BalancingSolver
@@ -20,9 +22,10 @@ from app.application.solver.models import (
     VolumeBounds,
 )
 from app.domain.entities import Ingredient, Recipe, RecipeIngredient
-from app.domain.enums import DilutionMethod
+from app.domain.enums import DilutionMethod, GlassType, ServingIce
 from app.domain.errors import SolverError
 from app.domain.services.balance_calculator import calculate_balance
+from app.domain.services.glassware import max_serving_volume_ml
 
 
 @pytest.fixture
@@ -195,6 +198,7 @@ class TestSugarAcidRatioTarget:
             id="no-acid",
             name="Rum, Syrup and a Splash of Lime",
             dilution_method=DilutionMethod.SHAKEN,
+            serving_ice=ServingIce.NONE,
             ingredients=(
                 RecipeIngredient(ingredient=white_rum, volume_ml=60.0),
                 RecipeIngredient(ingredient=simple_syrup, volume_ml=30.0),
@@ -291,3 +295,96 @@ class TestInputValidation:
         ingrediente, cioè di cambiare la ricetta invece di bilanciarla."""
         with pytest.raises(SolverError):
             VolumeBounds(min_ml=0.0)
+
+
+class TestGlassCapacity:
+    """La capienza del bicchiere è un vincolo di disuguaglianza (ADR-0009).
+
+    A differenza del volume finale richiesto, che è un'uguaglianza, la
+    capienza è un tetto: sotto di esso il solver è libero.
+    """
+
+    def test_a_recipe_without_a_glass_is_not_capped(
+        self, solver: BalancingSolver, unbalanced_daiquiri: Recipe
+    ) -> None:
+        result = solver.solve(unbalanced_daiquiri, TargetProfile(final_volume_ml=300.0))
+
+        assert result.status.is_usable
+        assert result.profile.final_volume_ml == pytest.approx(300.0, rel=0.01)
+
+    def test_the_final_volume_is_capped_at_the_glass_capacity(
+        self, solver: BalancingSolver, unbalanced_daiquiri: Recipe
+    ) -> None:
+        """Il punto di partenza (~140 ml) non entra in un bicchierino da 60 ml:
+        il solver, che da solo non avrebbe motivo di scendere, ci deve entrare."""
+        glass = replace(unbalanced_daiquiri, glass=GlassType.SHOT)
+        limit = max_serving_volume_ml(GlassType.SHOT, ServingIce.NONE)
+        assert limit is not None
+        assert calculate_balance(glass).final_volume_ml > limit, "il test presuppone l'overflow"
+
+        result = solver.solve(glass, TargetProfile(abv=0.16))
+
+        assert result.status.is_usable
+        assert result.profile.final_volume_ml <= limit * 1.01
+
+    def test_the_cap_does_not_block_a_drink_that_already_fits(
+        self, solver: BalancingSolver, unbalanced_daiquiri: Recipe
+    ) -> None:
+        coupe = replace(unbalanced_daiquiri, glass=GlassType.COUPE)
+        capped = solver.solve(coupe, TargetProfile(abv=0.16, brix=10.0))
+        free = solver.solve(unbalanced_daiquiri, TargetProfile(abv=0.16, brix=10.0))
+
+        assert capped.status is SolverStatus.CONVERGED
+        assert capped.profile.final_volume_ml < 180.0, "il tetto non è attivo"
+        # Con due target e tre incognite la soluzione non è unica e SLSQP può
+        # scegliere un punto diverso sulla stessa valle: non si confrontano
+        # i volumi, si verifica che i target siano serviti bene come prima.
+        assert capped.max_relative_error is not None
+        assert free.max_relative_error is not None
+        assert capped.max_relative_error < 0.10
+
+    def test_a_target_volume_above_the_capacity_is_infeasible(
+        self, solver: BalancingSolver, unbalanced_daiquiri: Recipe
+    ) -> None:
+        """220 ml non entrano in una coppa da 200 ml (utili: 180 ml)."""
+        coupe = replace(unbalanced_daiquiri, glass=GlassType.COUPE)
+
+        result = solver.solve(coupe, TargetProfile(final_volume_ml=220.0))
+
+        assert result.status is SolverStatus.INFEASIBLE
+
+    def test_a_target_volume_below_the_capacity_is_still_met(
+        self, solver: BalancingSolver, unbalanced_daiquiri: Recipe
+    ) -> None:
+        coupe = replace(unbalanced_daiquiri, glass=GlassType.COUPE)
+
+        result = solver.solve(coupe, TargetProfile(final_volume_ml=120.0))
+
+        assert result.status.is_usable
+        assert result.profile.final_volume_ml == pytest.approx(120.0, rel=0.01)
+
+    def test_serving_ice_lowers_the_cap(
+        self, solver: BalancingSolver, unbalanced_daiquiri: Recipe
+    ) -> None:
+        """Lo stesso bicchiere, ma con ghiaccio, ospita meno drink."""
+        on_ice = replace(
+            unbalanced_daiquiri, glass=GlassType.HIGHBALL, serving_ice=ServingIce.CUBES
+        )
+
+        # 360 ml × 0.9 × 0.65 = 210.6 ml: 230 ml non ci stanno, 180 sì (e
+        # senza ghiaccio 230 ml ci starebbero, nei 324 ml utili).
+        assert solver.solve(on_ice, TargetProfile(final_volume_ml=230.0)).status is (
+            SolverStatus.INFEASIBLE
+        )
+        assert solver.solve(on_ice, TargetProfile(final_volume_ml=180.0)).status.is_usable
+        neat = replace(on_ice, serving_ice=ServingIce.NONE)
+        assert solver.solve(neat, TargetProfile(final_volume_ml=230.0)).status.is_usable
+
+    def test_a_glass_without_capacity_does_not_constrain(
+        self, solver: BalancingSolver, unbalanced_daiquiri: Recipe
+    ) -> None:
+        other = replace(unbalanced_daiquiri, glass=GlassType.OTHER)
+
+        result = solver.solve(other, TargetProfile(final_volume_ml=300.0))
+
+        assert result.status.is_usable

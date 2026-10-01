@@ -32,7 +32,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.domain.enums import DilutionMethod, IngredientCategory
+from app.domain.enums import DilutionMethod, GlassType, IngredientCategory, ServingIce
 from app.domain.flavor import FLAVOR_VECTOR_DIMENSION
 
 from .base import Base
@@ -98,6 +98,12 @@ class RecipeModel(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     dilution_method: Mapped[DilutionMethod] = mapped_column(
         Enum(DilutionMethod, native_enum=False, length=16), nullable=False
+    )
+    serving_ice: Mapped[ServingIce] = mapped_column(
+        Enum(ServingIce, native_enum=False, length=16), nullable=False
+    )
+    glass: Mapped[GlassType | None] = mapped_column(
+        Enum(GlassType, native_enum=False, length=16), nullable=True
     )
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

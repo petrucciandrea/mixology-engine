@@ -14,3 +14,5 @@ dichiara quale sostituisce.
 | [0005](0005-vettore-di-sapore-a-descrittori.md) | Profilo organolettico a descrittori espliciti, non embedding | Accettata |
 | [0006](0006-volume-come-vincolo.md) | Il volume finale è un vincolo, non un obiettivo pesato | Accettata |
 | [0007](0007-matcher-similarita-e-affinita.md) | Il matcher tiene separate similarità (sostituzione) e affinità (abbinamento) | Accettata |
+| [0008](0008-ghiaccio-di-servizio.md) | Il ghiaccio di servizio è un attributo della ricetta, separato dalla tecnica | Accettata |
+| [0009](0009-bicchiere-di-servizio-e-capienza.md) | Il bicchiere è un attributo facoltativo della ricetta e ne limita il volume | Accettata |

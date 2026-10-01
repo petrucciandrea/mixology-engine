@@ -12,7 +12,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_calculate_balance_use_case, get_optimize_recipe_use_case
-from app.api.schemas.recipes import BalanceOut, BalanceProfileOut, RecipeIn, RecipeOut
+from app.api.schemas.recipes import BalanceOut, ConsumptionMinutes, RecipeIn
 from app.api.schemas.solver import OptimizeRequest, SolverResultOut
 from app.application.use_cases.balancing import (
     CalculateBalanceUseCase,
@@ -20,6 +20,7 @@ from app.application.use_cases.balancing import (
     DraftRecipe,
     OptimizeRecipeUseCase,
 )
+from app.domain.services.serving_dilution import DEFAULT_CONSUMPTION_MINUTES
 
 router = APIRouter(tags=["balancing"])
 
@@ -28,6 +29,8 @@ def _to_draft(payload: RecipeIn) -> DraftRecipe:
     return DraftRecipe(
         name=payload.name,
         dilution_method=payload.dilution_method,
+        serving_ice=payload.serving_ice,
+        glass=payload.glass,
         ingredients=tuple(
             DraftIngredient(ingredient_id=item.ingredient_id, volume_ml=item.volume_ml)
             for item in payload.ingredients
@@ -43,12 +46,10 @@ def _to_draft(payload: RecipeIn) -> DraftRecipe:
 async def calculate_balance(
     payload: RecipeIn,
     use_case: Annotated[CalculateBalanceUseCase, Depends(get_calculate_balance_use_case)],
+    consumption_minutes: ConsumptionMinutes = DEFAULT_CONSUMPTION_MINUTES,
 ) -> BalanceOut:
-    recipe, profile = await use_case.execute(_to_draft(payload))
-    return BalanceOut(
-        recipe=RecipeOut.from_entity(recipe),
-        profile=BalanceProfileOut.from_entity(profile),
-    )
+    result = await use_case.execute(_to_draft(payload), consumption_minutes)
+    return BalanceOut.from_result(result)
 
 
 @router.post(

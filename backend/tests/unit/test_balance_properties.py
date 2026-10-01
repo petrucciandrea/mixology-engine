@@ -26,7 +26,7 @@ from app.domain.entities import (
     Recipe,
     RecipeIngredient,
 )
-from app.domain.enums import DilutionMethod, IngredientCategory
+from app.domain.enums import DilutionMethod, IngredientCategory, ServingIce
 from app.domain.services.balance_calculator import calculate_balance
 
 # --- Strategie -------------------------------------------------------------
@@ -68,6 +68,7 @@ def recipes(draw: st.DrawFn, min_ingredients: int = 1, max_ingredients: int = 6)
         id="generated",
         name="Generated Recipe",
         dilution_method=draw(st.sampled_from(list(DilutionMethod))),
+        serving_ice=draw(st.sampled_from(list(ServingIce))),
         ingredients=tuple(items),
     )
 

@@ -11,7 +11,7 @@ import pytest
 
 from app.domain.balance import SOUR_RATIO_LOWER_BOUND, SOUR_RATIO_UPPER_BOUND
 from app.domain.entities import Ingredient, Recipe, RecipeIngredient
-from app.domain.enums import DilutionMethod
+from app.domain.enums import DilutionMethod, ServingIce
 from app.domain.services import dilution
 from app.domain.services.balance_calculator import calculate_balance, sugar_acid_ratio
 
@@ -115,6 +115,7 @@ class TestDaiquiri:
             id="daiquiri-dry",
             name="Daiquiri (dry)",
             dilution_method=DilutionMethod.SHAKEN,
+            serving_ice=ServingIce.NONE,
             ingredients=(
                 RecipeIngredient(ingredient=white_rum, volume_ml=60.0),
                 RecipeIngredient(ingredient=lime_juice, volume_ml=30.0),
@@ -170,6 +171,7 @@ class TestEdgeCases:
             id="zero-acidity",
             name="Rum & Syrup",
             dilution_method=DilutionMethod.STIRRED,
+            serving_ice=ServingIce.NONE,
             ingredients=(
                 RecipeIngredient(ingredient=white_rum, volume_ml=50.0),
                 RecipeIngredient(ingredient=simple_syrup, volume_ml=10.0),
@@ -188,6 +190,7 @@ class TestEdgeCases:
             id="built",
             name="Built Highball",
             dilution_method=DilutionMethod.BUILT,
+            serving_ice=ServingIce.CUBES,
             ingredients=(
                 RecipeIngredient(ingredient=white_rum, volume_ml=50.0),
                 RecipeIngredient(ingredient=lime_juice, volume_ml=20.0),
@@ -208,6 +211,7 @@ class TestEdgeCases:
             id="no-alcohol",
             name="Lime Cordial Sour",
             dilution_method=DilutionMethod.SHAKEN,
+            serving_ice=ServingIce.NONE,
             ingredients=(
                 RecipeIngredient(ingredient=lime_juice, volume_ml=30.0),
                 RecipeIngredient(ingredient=simple_syrup, volume_ml=20.0),

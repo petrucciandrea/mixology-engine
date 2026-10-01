@@ -24,6 +24,55 @@ class DilutionMethod(str, Enum):
     BUILT = "BUILT"
 
 
+class ServingIce(str, Enum):
+    """Ghiaccio nel bicchiere di servizio, o sua assenza.
+
+    È una proprietà del *servizio*, distinta dalla `DilutionMethod`: il
+    ghiaccio usato per raffreddare nel shaker o nel mixing glass viene
+    scartato, quello nel bicchiere resta e continua a diluire. Un Daiquiri
+    è shakerato e servito senza ghiaccio, un Whiskey Sour è shakerato e
+    servito su cubetti: stessa diluizione di preparazione, servizio diverso.
+
+    Assenza e tipo sono un solo enum (`NONE` incluso) perché due campi
+    separati ammetterebbero uno stato illegale — "senza ghiaccio" con un
+    tipo di ghiaccio — che così non si può nemmeno rappresentare.
+    """
+
+    NONE = "NONE"
+    CUBES = "CUBES"
+    LARGE_CUBE = "LARGE_CUBE"
+    CRUSHED = "CRUSHED"
+
+
+class GlassType(str, Enum):
+    """Bicchiere in cui il drink viene servito.
+
+    È una proprietà del *servizio* come `ServingIce`, ma **opzionale**: una
+    ricetta può non dichiararlo, e in quel caso non esiste un limite di
+    capienza. `OTHER` esiste per i bicchieri fuori elenco e, non avendo una
+    capienza nota, non pone alcun limite (vedi `domain/services/glassware`).
+
+    Il bicchiere non entra nella diluizione: ne descrive il contenitore,
+    non la termodinamica. Entra nel solver solo come tetto al volume.
+    """
+
+    COUPE = "COUPE"
+    MARTINI = "MARTINI"
+    NICK_AND_NORA = "NICK_AND_NORA"
+    ROCKS = "ROCKS"
+    DOUBLE_ROCKS = "DOUBLE_ROCKS"
+    HIGHBALL = "HIGHBALL"
+    COLLINS = "COLLINS"
+    FLUTE = "FLUTE"
+    WINE = "WINE"
+    BALLOON = "BALLOON"
+    COPPER_MUG = "COPPER_MUG"
+    TIKI = "TIKI"
+    HURRICANE = "HURRICANE"
+    SHOT = "SHOT"
+    OTHER = "OTHER"
+
+
 class IngredientCategory(str, Enum):
     """Famiglia merceologica dell'ingrediente.
 

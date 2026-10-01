@@ -17,7 +17,7 @@ from app.api.deps import (
 )
 from app.api.schemas.recipes import (
     BalanceOut,
-    BalanceProfileOut,
+    ConsumptionMinutes,
     RecipeIn,
     RecipeOut,
     RecipePageOut,
@@ -36,6 +36,7 @@ from app.application.use_cases.recipes import (
     ListRecipesUseCase,
     UpdateRecipeUseCase,
 )
+from app.domain.services.serving_dilution import DEFAULT_CONSUMPTION_MINUTES
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
@@ -44,6 +45,8 @@ def _to_draft(payload: RecipeIn) -> DraftRecipe:
     return DraftRecipe(
         name=payload.name,
         dilution_method=payload.dilution_method,
+        serving_ice=payload.serving_ice,
+        glass=payload.glass,
         ingredients=tuple(
             DraftIngredient(ingredient_id=item.ingredient_id, volume_ml=item.volume_ml)
             for item in payload.ingredients
@@ -127,12 +130,10 @@ async def get_recipe_balance(
     use_case: Annotated[
         CalculateStoredRecipeBalanceUseCase, Depends(get_calculate_stored_balance_use_case)
     ],
+    consumption_minutes: ConsumptionMinutes = DEFAULT_CONSUMPTION_MINUTES,
 ) -> BalanceOut:
-    recipe, profile = await use_case.execute(recipe_id)
-    return BalanceOut(
-        recipe=RecipeOut.from_entity(recipe),
-        profile=BalanceProfileOut.from_entity(profile),
-    )
+    result = await use_case.execute(recipe_id, consumption_minutes)
+    return BalanceOut.from_result(result)
 
 
 @router.post(

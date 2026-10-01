@@ -12,7 +12,7 @@ from app.application.matching.flavor_graph import (
     shared_aroma_descriptors,
 )
 from app.domain.entities import Ingredient, Recipe, RecipeIngredient
-from app.domain.enums import DilutionMethod, IngredientCategory
+from app.domain.enums import DilutionMethod, IngredientCategory, ServingIce
 from app.domain.flavor import FlavorProfile
 
 from .conftest import make_ingredient
@@ -36,6 +36,7 @@ def recipe(name: str, *ingredients: Ingredient) -> Recipe:
         id=name.lower().replace(" ", "-"),
         name=name,
         dilution_method=DilutionMethod.STIRRED,
+        serving_ice=ServingIce.NONE,
         ingredients=tuple(
             RecipeIngredient(ingredient=item, volume_ml=30.0) for item in ingredients
         ),

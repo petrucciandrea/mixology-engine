@@ -19,6 +19,7 @@ from app.domain.errors import (
     InvalidFlavorProfileError,
     InvalidPhysicalProfileError,
     InvalidRecipeError,
+    InvalidServingConditionsError,
     InvalidVolumeError,
     SolverError,
 )
@@ -29,6 +30,7 @@ _STATUS_BY_ERROR: dict[type[DomainError], int] = {
     EntityNotFoundError: status.HTTP_404_NOT_FOUND,
     DuplicateEntityError: status.HTTP_409_CONFLICT,
     InvalidVolumeError: status.HTTP_422_UNPROCESSABLE_ENTITY,
+    InvalidServingConditionsError: status.HTTP_422_UNPROCESSABLE_ENTITY,
     InvalidRecipeError: status.HTTP_422_UNPROCESSABLE_ENTITY,
     InvalidPhysicalProfileError: status.HTTP_422_UNPROCESSABLE_ENTITY,
     InvalidFlavorProfileError: status.HTTP_422_UNPROCESSABLE_ENTITY,

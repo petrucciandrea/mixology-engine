@@ -2,7 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { formatAcidity, formatBrix, formatMl, formatRatio } from "@/lib/utils";
-import type { BalanceProfile } from "@/types/api";
+import type { BalanceProfile, GlassFit, ServingProfile } from "@/types/api";
 
 /** Finestra di riferimento del rapporto zuccheri/acidi per un sour
     equilibrato. Stessi valori del dominio; qui servono solo a disegnare la
@@ -12,10 +12,17 @@ const SOUR_MAX = 7.0;
 
 interface BalanceReadoutProps {
   profile: BalanceProfile | null;
+  servingProfile: ServingProfile | null;
+  glassFit: GlassFit | null;
   isCalculating: boolean;
 }
 
-export function BalanceReadout({ profile, isCalculating }: BalanceReadoutProps) {
+export function BalanceReadout({
+  profile,
+  servingProfile,
+  glassFit,
+  isCalculating,
+}: BalanceReadoutProps) {
   if (profile === null) {
     return (
       <p className="py-8 text-center text-sm text-muted">
@@ -71,10 +78,67 @@ export function BalanceReadout({ profile, isCalculating }: BalanceReadoutProps) 
         />
       </dl>
 
+      {glassFit !== null && <GlassFitReadout fit={glassFit} />}
+
+      {servingProfile !== null && <ServingReadout serving={servingProfile} />}
+
       <SugarAcidGauge
         ratio={profile.sugar_acid_ratio}
         isBalanced={profile.is_balanced_sour}
       />
+    </div>
+  );
+}
+
+/** Quanto il drink riempie il bicchiere, sul massimo che il bicchiere
+    ammette (bordo libero e ghiaccio inclusi), non sulla capienza a filo. */
+function GlassFitReadout({ fit }: { fit: GlassFit }) {
+  const fill = Math.min(fit.fill_ratio, 1) * 100;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-muted">
+          Riempimento bicchiere
+        </span>
+        <span className="flex items-baseline gap-2">
+          <span className="tabular font-mono text-sm">
+            {formatMl(fit.volume_ml)} / {formatMl(fit.max_volume_ml)} ml
+          </span>
+          <Badge tone={fit.overflows ? "alert" : "good"}>
+            {fit.overflows ? "trabocca" : "ci sta"}
+          </Badge>
+        </span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
+        <div
+          className={fit.overflows ? "h-full bg-alert" : "h-full bg-good/60"}
+          style={{ width: `${fill}%` }}
+          aria-hidden
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Il drink dopo il ghiaccio nel bicchiere: un secondo profilo, mai
+    sommato al primo, perché dipende dal tempo di consumo assunto. */
+function ServingReadout({ serving }: { serving: ServingProfile }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-line px-3 py-2.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-muted">
+          Dopo {serving.consumption_minutes.toFixed(0)} min sul ghiaccio
+        </span>
+        <Badge tone="neutral">
+          +{formatMl(serving.melt_water_ml)} ml · {(serving.total_dilution_factor * 100).toFixed(0)}%
+        </Badge>
+      </div>
+      <p className="tabular font-mono text-sm">
+        {serving.abv_percent.toFixed(1)}% ABV
+        <span className="ml-2 text-[0.68rem] text-muted">
+          {formatBrix(serving.brix)} °Bx · {formatMl(serving.final_volume_ml)} ml
+        </span>
+      </p>
     </div>
   );
 }

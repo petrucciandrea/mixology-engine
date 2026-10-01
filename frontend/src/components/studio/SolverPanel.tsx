@@ -13,6 +13,8 @@ import {
   SOLVER_STATUS_LABELS,
   USABLE_SOLVER_STATUSES,
   type DilutionMethod,
+  type GlassType,
+  type ServingIce,
   type SolverResult,
   type TargetProfileInput,
 } from "@/types/api";
@@ -37,11 +39,20 @@ const EMPTY_TARGETS: TargetFields = { abv: "", sugarAcidRatio: "", finalVolumeMl
 interface SolverPanelProps {
   doses: Dose[];
   method: DilutionMethod;
+  servingIce: ServingIce;
+  glass: GlassType | null;
   recipeName: string;
   onApply: (volumes: Record<string, number>) => void;
 }
 
-export function SolverPanel({ doses, method, recipeName, onApply }: SolverPanelProps) {
+export function SolverPanel({
+  doses,
+  method,
+  servingIce,
+  glass,
+  recipeName,
+  onApply,
+}: SolverPanelProps) {
   const [targets, setTargets] = useState<TargetFields>(EMPTY_TARGETS);
   const [result, setResult] = useState<SolverResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +78,8 @@ export function SolverPanel({ doses, method, recipeName, onApply }: SolverPanelP
         recipe: {
           name: recipeName,
           dilution_method: method,
+          serving_ice: servingIce,
+          glass,
           ingredients: doses.map((dose) => ({
             ingredient_id: dose.ingredient.id,
             volume_ml: dose.volumeMl,

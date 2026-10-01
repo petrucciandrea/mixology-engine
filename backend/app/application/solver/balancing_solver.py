@@ -18,7 +18,9 @@ percentuale del rispettivo target.
 
 Soggetto a:
   * bounds  min_i ≤ x_i ≤ max_i   (per ingrediente)
-  * vincolo di uguaglianza sul volume finale, quando richiesto.
+  * vincolo di uguaglianza sul volume finale, quando richiesto;
+  * tetto di disuguaglianza sul volume finale, se la ricetta dichiara un
+    bicchiere con capienza nota (ADR-0009).
 
 Il volume è un **vincolo** e non un obiettivo: una coppa da 90 ml ne
 contiene 90, non "circa 90 con peso 0.5". Modellarlo come penalità
@@ -44,6 +46,7 @@ from scipy.optimize import minimize
 from app.domain.balance import BalanceProfile
 from app.domain.entities import Recipe
 from app.domain.services.balance_calculator import calculate_balance
+from app.domain.services.glassware import max_serving_volume_ml
 
 from .models import (
     SolverResult,
@@ -196,6 +199,12 @@ class BalancingSolver:
         # tolleranza marcherebbe come irrisolvibili problemi risolti bene.
         violation = self._constraint_violation(best, recipe, target)
         status = self._classify(best_success, hit_iteration_limit, violation)
+        message = best_message or status.value
+        if status is SolverStatus.INFEASIBLE and self._glass_cap_ml(recipe) is not None:
+            message = (
+                f"{message}; the glass holds at most {self._glass_cap_ml(recipe):.1f} ml "
+                "of drink"
+            )
 
         rounded = self._round_to_step(best, lower, upper, config.rounding_step_ml)
         final_recipe = recipe.with_volumes(tuple(rounded.tolist()))
@@ -208,7 +217,7 @@ class BalancingSolver:
             objective_value=self._objective(rounded, recipe, target, config, anchor),
             iterations=best_iterations,
             residuals=self._residuals(profile, target),
-            message=best_message or status.value,
+            message=message,
             winning_start=best_start_index,
         )
 
@@ -255,31 +264,60 @@ class BalancingSolver:
 
     # -- Vincoli ----------------------------------------------------------
 
+    @staticmethod
+    def _glass_cap_ml(recipe: Recipe) -> float | None:
+        """Tetto al volume del drink imposto dal bicchiere, se ne ha uno."""
+        if recipe.glass is None:
+            return None
+        return max_serving_volume_ml(recipe.glass, recipe.serving_ice)
+
     def _build_constraints(
         self, recipe: Recipe, target: TargetProfile
     ) -> tuple[dict[str, Any], ...]:
-        if target.final_volume_ml is None:
-            return ()
+        constraints: list[dict[str, Any]] = []
 
-        wanted = target.final_volume_ml
-
-        def volume_residual(volumes: np.ndarray) -> float:
+        def final_volume(volumes: np.ndarray) -> float:
             safe = np.maximum(np.asarray(volumes, dtype=float), _EPSILON)
-            profile = calculate_balance(recipe.with_volumes(tuple(safe.tolist())))
-            # Normalizzato sul target: mantiene il vincolo nello stesso
-            # ordine di grandezza dell'obiettivo, che è ciò che SLSQP si
-            # aspetta per calcolare moltiplicatori di Lagrange sensati.
-            return (profile.final_volume_ml - wanted) / wanted
+            return calculate_balance(recipe.with_volumes(tuple(safe.tolist()))).final_volume_ml
 
-        return ({"type": "eq", "fun": volume_residual},)
+        if target.final_volume_ml is not None:
+            wanted = target.final_volume_ml
+
+            def volume_residual(volumes: np.ndarray) -> float:
+                # Normalizzato sul target: mantiene il vincolo nello stesso
+                # ordine di grandezza dell'obiettivo, che è ciò che SLSQP si
+                # aspetta per calcolare moltiplicatori di Lagrange sensati.
+                return (final_volume(volumes) - wanted) / wanted
+
+            constraints.append({"type": "eq", "fun": volume_residual})
+
+        cap = self._glass_cap_ml(recipe)
+        if cap is not None:
+
+            def capacity_slack(volumes: np.ndarray) -> float:
+                # SLSQP vuole `fun >= 0`: il margine residuo del bicchiere,
+                # normalizzato come sopra.
+                return (cap - final_volume(volumes)) / cap
+
+            constraints.append({"type": "ineq", "fun": capacity_slack})
+
+        return tuple(constraints)
 
     def _constraint_violation(
         self, volumes: np.ndarray, recipe: Recipe, target: TargetProfile
     ) -> float:
-        if target.final_volume_ml is None:
+        cap = self._glass_cap_ml(recipe)
+        if target.final_volume_ml is None and cap is None:
             return 0.0
         profile = calculate_balance(recipe.with_volumes(tuple(volumes.tolist())))
-        return abs(profile.final_volume_ml - target.final_volume_ml) / target.final_volume_ml
+        final_volume = profile.final_volume_ml
+        violation = 0.0
+        if target.final_volume_ml is not None:
+            violation += abs(final_volume - target.final_volume_ml) / target.final_volume_ml
+        if cap is not None:
+            # Il tetto si viola solo da un lato: stare sotto non costa nulla.
+            violation += max(0.0, final_volume - cap) / cap
+        return violation
 
     # -- Punti di partenza -------------------------------------------------
 

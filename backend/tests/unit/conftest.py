@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from app.domain.entities import Ingredient, PhysicalProfile, Recipe, RecipeIngredient
-from app.domain.enums import DilutionMethod, IngredientCategory
+from app.domain.enums import DilutionMethod, IngredientCategory, ServingIce
 from app.domain.flavor import FlavorProfile
 
 
@@ -136,6 +136,7 @@ def daiquiri(white_rum: Ingredient, lime_juice: Ingredient, simple_syrup: Ingred
         id="classic-daiquiri",
         name="Classic Daiquiri",
         dilution_method=DilutionMethod.SHAKEN,
+        serving_ice=ServingIce.NONE,
         ingredients=(
             RecipeIngredient(ingredient=white_rum, volume_ml=60.0),
             RecipeIngredient(ingredient=lime_juice, volume_ml=30.0),
@@ -151,6 +152,7 @@ def negroni(gin: Ingredient, sweet_vermouth: Ingredient, campari: Ingredient) ->
         id="negroni",
         name="Negroni",
         dilution_method=DilutionMethod.STIRRED,
+        serving_ice=ServingIce.LARGE_CUBE,
         ingredients=(
             RecipeIngredient(ingredient=gin, volume_ml=30.0),
             RecipeIngredient(ingredient=sweet_vermouth, volume_ml=30.0),
@@ -168,6 +170,7 @@ def unbalanced_daiquiri(
         id="unbalanced-daiquiri",
         name="Unbalanced Daiquiri",
         dilution_method=DilutionMethod.SHAKEN,
+        serving_ice=ServingIce.NONE,
         ingredients=(
             RecipeIngredient(ingredient=white_rum, volume_ml=50.0),
             RecipeIngredient(ingredient=lime_juice, volume_ml=15.0),

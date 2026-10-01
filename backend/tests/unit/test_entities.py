@@ -10,7 +10,7 @@ from app.domain.entities import (
     Recipe,
     RecipeIngredient,
 )
-from app.domain.enums import DilutionMethod, IngredientCategory
+from app.domain.enums import DilutionMethod, IngredientCategory, ServingIce
 from app.domain.errors import (
     InvalidPhysicalProfileError,
     InvalidRecipeError,
@@ -74,6 +74,7 @@ class TestRecipe:
                 id="empty",
                 name="Empty",
                 dilution_method=DilutionMethod.SHAKEN,
+                serving_ice=ServingIce.NONE,
                 ingredients=(),
             )
 
@@ -89,6 +90,7 @@ class TestRecipe:
                 id="duplicate",
                 name="Duplicate",
                 dilution_method=DilutionMethod.SHAKEN,
+                serving_ice=ServingIce.NONE,
                 ingredients=(
                     RecipeIngredient(ingredient=white_rum, volume_ml=30.0),
                     RecipeIngredient(ingredient=white_rum, volume_ml=15.0),
@@ -123,6 +125,7 @@ class TestRecipe:
                 id="   ",
                 name="No Id",
                 dilution_method=DilutionMethod.SHAKEN,
+                serving_ice=ServingIce.NONE,
                 ingredients=(RecipeIngredient(ingredient=white_rum, volume_ml=30.0),),
             )
 

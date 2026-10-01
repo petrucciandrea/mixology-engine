@@ -193,6 +193,7 @@ def daiquiri_payload(
     return {
         "name": "Daiquiri",
         "dilution_method": "SHAKEN",
+        "serving_ice": "NONE",
         "ingredients": [
             {"ingredient_id": rum_id, "volume_ml": volumes[0]},
             {"ingredient_id": lime_id, "volume_ml": volumes[1]},

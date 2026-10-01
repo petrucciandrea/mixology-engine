@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities import Recipe, RecipeIngredient
-from app.domain.enums import DilutionMethod, IngredientCategory
+from app.domain.enums import DilutionMethod, GlassType, IngredientCategory, ServingIce
 from app.domain.flavor import FlavorProfile
 from app.domain.repositories import IngredientRepository, RecipeRepository, UnitOfWork
 
@@ -182,6 +183,7 @@ class TestRecipeRepository:
             id=str(uuid.uuid4()),
             name="Daiquiri",
             dilution_method=DilutionMethod.SHAKEN,
+            serving_ice=ServingIce.NONE,
             instructions="Shake con ghiaccio, doppio filtro, coppetta ghiacciata.",
             ingredients=(
                 RecipeIngredient(ingredient=rum, volume_ml=60.0),
@@ -203,6 +205,45 @@ class TestRecipeRepository:
         loaded = await recipe_repository.get(recipe.id)
 
         assert loaded == recipe, "ricetta, dosaggi e ingredienti tornano identici"
+
+    @pytest.mark.parametrize("serving_ice", list(ServingIce))
+    async def test_serving_ice_survives_the_round_trip(
+        self,
+        serving_ice: ServingIce,
+        recipe_repository: RecipeRepository,
+        ingredient_repository: IngredientRepository,
+        unit_of_work: UnitOfWork,
+    ) -> None:
+        recipe = replace(
+            await self._stock_daiquiri(ingredient_repository, unit_of_work),
+            serving_ice=serving_ice,
+        )
+        await recipe_repository.add(recipe)
+        await unit_of_work.commit()
+
+        loaded = await recipe_repository.get(recipe.id)
+
+        assert loaded is not None
+        assert loaded.serving_ice is serving_ice
+
+    @pytest.mark.parametrize("glass", [None, *GlassType])
+    async def test_glass_survives_the_round_trip(
+        self,
+        glass: GlassType | None,
+        recipe_repository: RecipeRepository,
+        ingredient_repository: IngredientRepository,
+        unit_of_work: UnitOfWork,
+    ) -> None:
+        recipe = replace(
+            await self._stock_daiquiri(ingredient_repository, unit_of_work), glass=glass
+        )
+        await recipe_repository.add(recipe)
+        await unit_of_work.commit()
+
+        loaded = await recipe_repository.get(recipe.id)
+
+        assert loaded is not None
+        assert loaded.glass is glass
 
     async def test_the_pouring_order_is_preserved(
         self,

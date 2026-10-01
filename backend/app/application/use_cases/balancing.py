@@ -15,12 +15,17 @@ from dataclasses import dataclass
 
 from app.application.solver.balancing_solver import BalancingSolver
 from app.application.solver.models import SolverResult, SolverSettings, TargetProfile
-from app.domain.balance import BalanceProfile
+from app.domain.balance import BalanceProfile, ServingProfile
 from app.domain.entities import Ingredient, Recipe, RecipeIngredient
-from app.domain.enums import DilutionMethod
+from app.domain.enums import DilutionMethod, GlassType, ServingIce
 from app.domain.errors import EntityNotFoundError, InvalidRecipeError
 from app.domain.repositories import IngredientRepository, RecipeRepository
 from app.domain.services.balance_calculator import calculate_balance
+from app.domain.services.glassware import GlassFit, assess_glass_fit
+from app.domain.services.serving_dilution import (
+    DEFAULT_CONSUMPTION_MINUTES,
+    calculate_serving_profile,
+)
 
 #: Prefisso degli id delle ricette non persistite. Una ricetta di lavoro
 #: è comunque un aggregate valido — deve avere un'identità — ma l'id
@@ -48,7 +53,9 @@ class DraftRecipe:
 
     name: str
     dilution_method: DilutionMethod
+    serving_ice: ServingIce
     ingredients: tuple[DraftIngredient, ...]
+    glass: GlassType | None = None
 
     def __post_init__(self) -> None:
         if not self.ingredients:
@@ -82,11 +89,37 @@ class RecipeAssembler:
             id=recipe_id or f"{DRAFT_ID_PREFIX}{uuid.uuid4()}",
             name=draft.name,
             dilution_method=draft.dilution_method,
+            serving_ice=draft.serving_ice,
+            glass=draft.glass,
             ingredients=tuple(
                 RecipeIngredient(ingredient=by_id[item.ingredient_id], volume_ml=item.volume_ml)
                 for item in draft.ingredients
             ),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class BalanceResult:
+    """Ricetta, profilo da preparazione, profilo da servizio e bicchiere.
+
+    `serving` è `None` per una ricetta servita senza ghiaccio; `glass_fit`
+    per una ricetta senza bicchiere, o con un bicchiere senza capienza nota.
+    """
+
+    recipe: Recipe
+    profile: BalanceProfile
+    serving: ServingProfile | None
+    glass_fit: GlassFit | None
+
+
+def _balance_result(recipe: Recipe, consumption_minutes: float) -> BalanceResult:
+    profile = calculate_balance(recipe)
+    return BalanceResult(
+        recipe=recipe,
+        profile=profile,
+        serving=calculate_serving_profile(recipe, profile, consumption_minutes),
+        glass_fit=assess_glass_fit(recipe, profile.final_volume_ml),
+    )
 
 
 class CalculateBalanceUseCase:
@@ -95,12 +128,14 @@ class CalculateBalanceUseCase:
     def __init__(self, ingredients: IngredientRepository) -> None:
         self._assembler = RecipeAssembler(ingredients)
 
-    async def execute(self, draft: DraftRecipe) -> tuple[Recipe, BalanceProfile]:
+    async def execute(
+        self, draft: DraftRecipe, consumption_minutes: float = DEFAULT_CONSUMPTION_MINUTES
+    ) -> BalanceResult:
         recipe = await self._assembler.assemble(draft)
         # Nessun `to_thread` qui: il calcolo è una manciata di somme su
         # pochi ingredienti, dell'ordine dei microsecondi. Spostarlo su un
         # thread costerebbe più della sua esecuzione.
-        return recipe, calculate_balance(recipe)
+        return _balance_result(recipe, consumption_minutes)
 
 
 class CalculateStoredRecipeBalanceUseCase:
@@ -109,11 +144,13 @@ class CalculateStoredRecipeBalanceUseCase:
     def __init__(self, recipes: RecipeRepository) -> None:
         self._recipes = recipes
 
-    async def execute(self, recipe_id: str) -> tuple[Recipe, BalanceProfile]:
+    async def execute(
+        self, recipe_id: str, consumption_minutes: float = DEFAULT_CONSUMPTION_MINUTES
+    ) -> BalanceResult:
         recipe = await self._recipes.get(recipe_id)
         if recipe is None:
             raise EntityNotFoundError("Recipe", recipe_id)
-        return recipe, calculate_balance(recipe)
+        return _balance_result(recipe, consumption_minutes)
 
 
 class OptimizeRecipeUseCase:
@@ -168,12 +205,14 @@ class OptimizeStoredRecipeUseCase:
 def draft_from_ingredients(
     name: str,
     dilution_method: DilutionMethod,
+    serving_ice: ServingIce,
     items: Sequence[tuple[str, float]],
 ) -> DraftRecipe:
     """Helper di costruzione, usato soprattutto dai test e dagli script di seed."""
     return DraftRecipe(
         name=name,
         dilution_method=dilution_method,
+        serving_ice=serving_ice,
         ingredients=tuple(
             DraftIngredient(ingredient_id=ingredient_id, volume_ml=volume)
             for ingredient_id, volume in items

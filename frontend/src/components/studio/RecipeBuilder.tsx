@@ -12,7 +12,13 @@ import {
   CATEGORY_LABELS,
   DILUTION_METHODS,
   DILUTION_METHOD_LABELS,
+  GLASS_LABELS,
+  GLASS_TYPES,
+  SERVING_ICES,
+  SERVING_ICE_LABELS,
   type DilutionMethod,
+  type GlassType,
+  type ServingIce,
 } from "@/types/api";
 
 /** Estremi dello slider, in ml. Coprono dalla goccia di bitter al long
@@ -27,8 +33,12 @@ const STEP_ML = 2.5;
 interface RecipeBuilderProps {
   doses: Dose[];
   method: DilutionMethod;
+  servingIce: ServingIce;
+  glass: GlassType | null;
   totalVolumeMl: number;
   onMethodChange: (method: DilutionMethod) => void;
+  onServingIceChange: (servingIce: ServingIce) => void;
+  onGlassChange: (glass: GlassType | null) => void;
   onVolumeChange: (ingredientId: string, volumeMl: number) => void;
   onRemove: (ingredientId: string) => void;
 }
@@ -36,8 +46,12 @@ interface RecipeBuilderProps {
 export function RecipeBuilder({
   doses,
   method,
+  servingIce,
+  glass,
   totalVolumeMl,
   onMethodChange,
+  onServingIceChange,
+  onGlassChange,
   onVolumeChange,
   onRemove,
 }: RecipeBuilderProps) {
@@ -75,6 +89,57 @@ export function RecipeBuilder({
             {method === "BUILT"
               ? "Costruito nel bicchiere: il profilo mostrato è quello del drink appena versato, senza diluizione da preparazione."
               : "La curva di diluizione di Dave Arnold determina quanta acqua di fusione entra nel drink."}
+          </p>
+        </fieldset>
+
+        <fieldset className="flex flex-col gap-2">
+          <legend className="sr-only">Ghiaccio nel bicchiere</legend>
+          <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted">
+            Servizio
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {SERVING_ICES.map((candidate) => (
+              <Button
+                key={candidate}
+                size="sm"
+                variant={candidate === servingIce ? "primary" : "secondary"}
+                onClick={() => onServingIceChange(candidate)}
+                aria-pressed={candidate === servingIce}
+              >
+                {SERVING_ICE_LABELS[candidate]}
+              </Button>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="flex flex-col gap-2">
+          <legend className="sr-only">Bicchiere</legend>
+          <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted">
+            Bicchiere
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              size="sm"
+              variant={glass === null ? "primary" : "secondary"}
+              onClick={() => onGlassChange(null)}
+              aria-pressed={glass === null}
+            >
+              Nessuno
+            </Button>
+            {GLASS_TYPES.map((candidate) => (
+              <Button
+                key={candidate}
+                size="sm"
+                variant={candidate === glass ? "primary" : "secondary"}
+                onClick={() => onGlassChange(candidate)}
+                aria-pressed={candidate === glass}
+              >
+                {GLASS_LABELS[candidate]}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs leading-relaxed text-muted">
+            Il bicchiere pone un tetto al volume del drink: l&apos;ottimizzatore lo rispetta.
           </p>
         </fieldset>
 
