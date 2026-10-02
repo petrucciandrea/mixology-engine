@@ -1,0 +1,72 @@
+name: Deploy
+
+# Rilascio del backend in produzione (ADR-0010): prima lo schema, poi il
+# codice. Render non fa il deploy al push (`autoDeployTrigger: off` in
+# render.yaml); lo avvia questo workflow, e solo dopo che le migrazioni
+# sono state applicate a Neon. Così il codice nuovo non incontra mai uno
+# schema vecchio. Il frontend lo rilascia Vercel da solo a ogni push su
+# `main`.
+
+on:
+  # Dopo la CI del backend su `main`, e solo se è verde (vedi `if` sotto):
+  # nessun rilascio di un commit che non ha passato i controlli.
+  workflow_run:
+    workflows: [Backend]
+    types: [completed]
+    branches: [main]
+  # Rilascio manuale, ad esempio per il primo popolamento del database.
+  workflow_dispatch:
+
+concurrency:
+  # Due rilasci in parallelo applicherebbero le stesse migrazioni due
+  # volte: si mettono in coda, senza annullare quello in corso.
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    # L'environment custodisce i secret di produzione: sono visibili solo a
+    # questo job, non alla CI che gira anche sulle pull request.
+    environment: production
+
+    env:
+      # Il commit verificato dalla CI, non l'ultimo di `main`: se nel
+      # frattempo è arrivato un altro push, toccherà al suo workflow.
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Installa uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.4"
+          enable-cache: true
+
+      - name: Installa le dipendenze di produzione
+        run: uv sync --frozen --no-dev
+
+      - name: Migrazioni
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: uv run --no-sync alembic upgrade head
+
+      - name: Seed
+        # Idempotente: ingredienti e ricette già presenti vengono saltati.
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: uv run --no-sync python -m scripts.seed
+
+      - name: Rilascio su Render
+        # `ref` fa rilasciare esattamente il commit appena migrato.
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}&ref=${DEPLOY_SHA}"
