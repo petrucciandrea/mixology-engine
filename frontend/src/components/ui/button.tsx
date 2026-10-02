@@ -7,21 +7,23 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-45",
+  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[7px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-45",
   {
     variants: {
       variant: {
-        // L'oro è riservato all'azione principale della pagina. Usarlo per
-        // tutto lo svuoterebbe di significato: se tutto risalta, niente risalta.
-        primary: "bg-accent text-ink hover:bg-accent-strong font-semibold",
-        secondary: "bg-surface-2 text-foreground hover:bg-line border border-line",
-        ghost: "text-muted hover:text-foreground hover:bg-surface-2",
-        danger: "bg-alert-soft text-alert border border-alert/30 hover:bg-alert/15",
+        // L'arancio è riservato all'azione principale della pagina, che è
+        // "Bilancia". Usarlo anche per salvare lo svuoterebbe di significato:
+        // se tutto risalta, niente risalta.
+        primary: "bg-accent font-semibold text-ink hover:bg-accent-strong",
+        secondary:
+          "bg-surface-2 font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--color-outline)] hover:bg-line",
+        outline: "border border-line bg-transparent text-foreground hover:bg-surface-2",
+        ghost: "bg-transparent text-soft hover:bg-surface-2 hover:text-foreground",
       },
       size: {
-        sm: "h-8 px-3 text-xs",
-        md: "h-10 px-4",
-        icon: "h-8 w-8",
+        sm: "h-7 rounded-md px-2.5 text-[12.5px]",
+        md: "h-9 px-3.5 text-[13.5px]",
+        icon: "h-[30px] w-[30px] rounded-md text-lg leading-none",
       },
     },
     defaultVariants: { variant: "secondary", size: "md" },
@@ -39,10 +41,15 @@ export function Button({
   variant,
   size,
   asChild = false,
+  type = "button",
   ...props
 }: ButtonProps) {
   const Component = asChild ? Slot : "button";
   return (
-    <Component className={cn(buttonVariants({ variant, size }), className)} {...props} />
+    <Component
+      type={asChild ? undefined : type}
+      className={cn(buttonVariants({ variant, size }), className)}
+      {...props}
+    />
   );
 }

@@ -24,6 +24,7 @@ from app.domain.services.balance_calculator import calculate_balance
 from app.domain.services.glassware import GlassFit, assess_glass_fit
 from app.domain.services.serving_dilution import (
     DEFAULT_CONSUMPTION_MINUTES,
+    calculate_serving_curve,
     calculate_serving_profile,
 )
 
@@ -31,6 +32,12 @@ from app.domain.services.serving_dilution import (
 #: è comunque un aggregate valido — deve avere un'identità — ma l'id
 #: dichiara che non esiste una riga corrispondente nel database.
 DRAFT_ID_PREFIX = "draft:"
+
+#: Finestra e passo della curva di servizio che accompagna ogni bilancio.
+#: Mezz'ora copre il tempo in cui si beve un drink; il minuto è la
+#: risoluzione a cui la si legge, e tiene la risposta sotto i 32 punti.
+SERVING_CURVE_SPAN_MINUTES = 30.0
+SERVING_CURVE_STEP_MINUTES = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,13 +111,19 @@ class RecipeAssembler:
 class BalanceResult:
     """Ricetta, profilo da preparazione, profilo da servizio e bicchiere.
 
-    `serving` è `None` per una ricetta servita senza ghiaccio; `glass_fit`
-    per una ricetta senza bicchiere, o con un bicchiere senza capienza nota.
+    `serving` e `serving_curve` sono `None` per una ricetta servita senza
+    ghiaccio; `glass_fit` per una ricetta senza bicchiere, o con un
+    bicchiere senza capienza nota.
+
+    La curva viaggia con il profilo invece che su una richiesta a parte:
+    l'editor disegna bicchiere e curva dallo stesso stato della ricetta, e
+    due risposte separate potrebbero arrivare da due stati diversi.
     """
 
     recipe: Recipe
     profile: BalanceProfile
     serving: ServingProfile | None
+    serving_curve: tuple[ServingProfile, ...] | None
     glass_fit: GlassFit | None
 
 
@@ -120,6 +133,12 @@ def _balance_result(recipe: Recipe, consumption_minutes: float) -> BalanceResult
         recipe=recipe,
         profile=profile,
         serving=calculate_serving_profile(recipe, profile, consumption_minutes),
+        serving_curve=calculate_serving_curve(
+            recipe,
+            profile,
+            span_minutes=SERVING_CURVE_SPAN_MINUTES,
+            step_minutes=SERVING_CURVE_STEP_MINUTES,
+        ),
         glass_fit=assess_glass_fit(recipe, profile.final_volume_ml),
     )
 

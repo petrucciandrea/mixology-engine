@@ -69,6 +69,9 @@ export interface UseRecipeResult {
   profile: BalanceProfile | null;
   /** Il drink dopo il ghiaccio di servizio; `null` se servito senza. */
   servingProfile: ServingProfile | null;
+  /** Lo stesso drink minuto per minuto, da quando è servito; `null` se
+      servito senza ghiaccio. */
+  servingCurve: ServingProfile[] | null;
   /** Riempimento del bicchiere; `null` senza bicchiere o senza capienza. */
   glassFit: GlassFit | null;
   error: string | null;
@@ -99,6 +102,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
 
   const [profile, setProfile] = useState<BalanceProfile | null>(null);
   const [servingProfile, setServingProfile] = useState<ServingProfile | null>(null);
+  const [servingCurve, setServingCurve] = useState<ServingProfile[] | null>(null);
   const [glassFit, setGlassFit] = useState<GlassFit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -127,6 +131,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     if (recipeInput === null) {
       setProfile(null);
       setServingProfile(null);
+      setServingCurve(null);
       setGlassFit(null);
       setError(null);
       setIsCalculating(false);
@@ -142,6 +147,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
           if (requestId !== latestRequest.current) return;
           setProfile(response.profile);
           setServingProfile(response.serving_profile);
+          setServingCurve(response.serving_curve);
           setGlassFit(response.glass_fit);
           setError(null);
         })
@@ -230,6 +236,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     setRecipeId(null);
     setProfile(null);
     setServingProfile(null);
+    setServingCurve(null);
     setGlassFit(null);
     setError(null);
   }, [initialName]);
@@ -243,6 +250,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     name,
     recipeId,
     servingProfile,
+    servingCurve,
     glassFit,
     recipeInput,
     profile,

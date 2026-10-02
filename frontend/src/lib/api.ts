@@ -23,16 +23,12 @@ import type {
 } from "@/types/api";
 
 /**
- * Il browser raggiunge il backend dalla porta pubblicata sull'host, non
- * dall'hostname interno alla rete Docker: il codice gira nella macchina di
- * chi guarda, dove `backend` non si risolve.
+ * L'API si chiama sulla stessa origine della pagina: è il server Next a
+ * inoltrarla al backend (`rewrites` in `next.config.ts`). Il bundle non
+ * contiene indirizzi, il browser non fa richieste cross-origin, e la stessa
+ * pagina funziona da `localhost` come dal telefono sulla rete locale.
  */
-const BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(
-  /\/$/,
-  "",
-);
-
-const API = `${BASE_URL}/api/v1`;
+const API = "/api/v1";
 
 /**
  * Errore che conserva ciò che il backend ha detto.
@@ -97,6 +93,12 @@ function describeFailure(status: number, body: unknown): [string, string] {
     if (Array.isArray(body.detail)) {
       return ["ValidationError", summariseValidation(body.detail)];
     }
+  }
+  // Un 5xx senza corpo JSON non viene dal backend, che risponde sempre nel
+  // suo formato: è il proxy di Next che non l'ha raggiunto, o un crash
+  // prima che il backend potesse rispondere.
+  if (status >= 500) {
+    return ["BackendUnavailable", "Backend non raggiungibile o in errore"];
   }
   return ["HttpError", `Richiesta fallita con stato ${status}`];
 }

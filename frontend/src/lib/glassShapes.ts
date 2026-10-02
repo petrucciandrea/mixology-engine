@@ -95,8 +95,29 @@ const SHAPES: Record<GlassType, GlassShape> = {
   OTHER: GENERIC_SHAPE,
 };
 
+/** L'ingombro verticale del bicchiere più alto, coppa più stelo: la flûte.
+    Il disegno grande lo usa come tetto comune, così i bicchieri restano in
+    scala fra loro senza spazio vuoto sopra il più alto. */
+export const TALLEST_GLASS_PX = Math.max(
+  ...[GENERIC_SHAPE, ...Object.values(SHAPES)].map((shape) => shape.heightPx + shape.stemPx),
+);
+
 export function shapeFor(glass: GlassType | null): GlassShape {
   return glass === null ? GENERIC_SHAPE : SHAPES[glass];
+}
+
+/** Sagoma intermedia fra due bicchieri, `progress` in [0, 1]. Serve solo a
+    far vedere il cambio di bicchiere come una trasformazione e non come
+    un salto: misure e profilo si interpolano linearmente. */
+export function blendShapes(from: GlassShape, to: GlassShape, progress: number): GlassShape {
+  if (progress >= 1 || from === to) return to;
+  return {
+    heightPx: lerp(from.heightPx, to.heightPx, progress),
+    widthPx: lerp(from.widthPx, to.widthPx, progress),
+    stemPx: lerp(from.stemPx, to.stemPx, progress),
+    footPx: lerp(from.footPx, to.footPx, progress),
+    width: (t) => lerp(from.width(t), to.width(t), progress),
+  };
 }
 
 /** Passi di campionamento del profilo: abbastanza fitti perché le curve
@@ -139,7 +160,11 @@ export function levelForFraction(shape: GlassShape, fraction: number): number {
 }
 
 /** Il vano fra due altezze relative, come poligono: il profilo sinistro
-    in salita, poi il destro in discesa. */
+    in salita, poi il destro in discesa.
+
+    Le coordinate si arrotondano al centesimo: le funzioni trigonometriche
+    possono differire nell'ultima cifra fra il motore del server e quello
+    del browser, e un percorso diverso al carattere rompe l'idratazione. */
 export function sliceOutline(
   shape: GlassShape,
   from: number,
@@ -154,8 +179,8 @@ export function sliceOutline(
     const t = from + ((to - from) * i) / (steps - 1);
     const half = (shape.width(t) * shape.widthPx) / 2;
     const y = bottomY - t * shape.heightPx;
-    left.push(`${centreX - half} ${y}`);
-    right.push(`${centreX + half} ${y}`);
+    left.push(`${(centreX - half).toFixed(2)} ${y.toFixed(2)}`);
+    right.push(`${(centreX + half).toFixed(2)} ${y.toFixed(2)}`);
   }
   return `M ${left.join(" L ")} L ${right.reverse().join(" L ")} Z`;
 }

@@ -71,6 +71,9 @@ class GlassFit:
 
     capacity_ml: float
     max_volume_ml: float
+    #: Spazio che il ghiaccio di servizio sottrae al drink; 0 senza ghiaccio.
+    #: Con `max_volume_ml` fa il volume utile del bicchiere.
+    ice_volume_ml: float
     volume_ml: float
 
     @property
@@ -93,8 +96,10 @@ def assess_glass_fit(recipe: Recipe, volume_ml: float) -> GlassFit | None:
     max_volume = max_serving_volume_ml(recipe.glass, recipe.serving_ice)
     if max_volume is None:
         return None
+    capacity = GLASS_CAPACITY_ML[recipe.glass]
     return GlassFit(
-        capacity_ml=GLASS_CAPACITY_ML[recipe.glass],
+        capacity_ml=capacity,
         max_volume_ml=max_volume,
+        ice_volume_ml=capacity * USABLE_FILL_FRACTION - max_volume,
         volume_ml=volume_ml,
     )

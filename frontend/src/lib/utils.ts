@@ -18,9 +18,12 @@ export function formatAbv(fraction: number): string {
   return `${(fraction * 100).toFixed(1)}%`;
 }
 
-/** Volumi al decimo di ml, senza decimali inutili: 60 → "60", 22.5 → "22.5". */
+/** Volumi al decimo di ml, senza decimali inutili: 60 → "60", 22.5 → "22.5",
+    59.98 → "60". L'arrotondamento prima del test conta per i volumi
+    calcolati, che non sono quasi mai interi esatti. */
 export function formatMl(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
 export function formatBrix(value: number): string {

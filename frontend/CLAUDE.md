@@ -7,8 +7,20 @@
 - Bozza e archivio sono due hook: `useRecipe` governa la ricetta sul banco
   (con `recipeId` se deriva da una salvata), `useRecipeBook` l'elenco su
   `/recipes`. "Salva" fa PUT se `recipeId` c'è, altrimenti POST.
-- Il browser raggiunge il backend via `NEXT_PUBLIC_API_URL` (porta
-  pubblicata), non l'hostname `backend`.
+- Il browser chiama `/api/v1` sulla stessa origine della pagina; il server
+  Next la inoltra al backend (`rewrites` in `next.config.ts`, destinazione
+  `BACKEND_INTERNAL_URL`, in Docker `http://backend:8000`). Niente CORS e
+  niente IP nel bundle: lo studio si apre anche da altri dispositivi in
+  rete. Le rewrite si fissano a build time (argomento di build nel
+  Dockerfile).
+- `useSolver` governa target ed esito dell'ottimizzazione: l'esito si
+  applica subito al dosaggio (`review`, con Mantieni/Ripristina); ogni
+  modifica a mano passa da `invalidate()` nella pagina, che scarta le
+  risposte superate.
+- Nessuna fisica nel frontend: profili, curva di servizio nel tempo
+  (`serving_curve`) e riempimento arrivano da `/balance`. Lato client
+  restano solo rappresentazione (`lib/flavor.ts`, interpolazioni dei
+  disegni in `useTweenedVolumes` e `useGlassShape`).
 
 Prossimo pezzo aperto: vista a rete del grafo dei sapori (D3) sopra
 `/match/graph` e `/match/bridge`, già pronti.

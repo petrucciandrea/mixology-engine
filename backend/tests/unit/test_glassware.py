@@ -128,3 +128,20 @@ class TestAssessGlassFit:
         assert fit is not None
         assert fit.fill_ratio == pytest.approx(1.0)
         assert not fit.overflows
+
+    def test_a_neat_drink_leaves_no_room_to_ice(self, daiquiri: Recipe) -> None:
+        coupe = replace(daiquiri, glass=GlassType.COUPE)
+        fit = assess_glass_fit(coupe, 100.0)
+
+        assert fit is not None
+        assert fit.ice_volume_ml == 0.0
+
+    def test_ice_and_drink_share_the_usable_volume(self, daiquiri: Recipe) -> None:
+        rocks = replace(daiquiri, glass=GlassType.ROCKS, serving_ice=ServingIce.CUBES)
+        fit = assess_glass_fit(rocks, 100.0)
+
+        assert fit is not None
+        # Tumbler basso 350 ml: 350 × 0.9 × 0.35 = 110.25 ml di ghiaccio,
+        # e insieme al drink massimo fanno il volume utile, 315 ml.
+        assert fit.ice_volume_ml == pytest.approx(110.25)
+        assert fit.max_volume_ml + fit.ice_volume_ml == pytest.approx(315.0)

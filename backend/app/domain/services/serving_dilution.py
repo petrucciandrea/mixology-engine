@@ -32,15 +32,30 @@ pochi secondi; un cubo grosso ci mette di più. Su tempi di consumo lunghi
 la differenza fra i tipi si riduce: è una conseguenza del modello, non un
 difetto.
 
+**La temperatura** discende dalle stesse due ipotesi. Il modello a capacità
+concentrata che dà `m_eq · (1 − e^(−t/τ))` fa decadere lo scarto
+dall'equilibrio con la stessa costante di tempo, e l'equilibrio intanto si
+sposta, perché l'acqua di fusione ambiente diluisce la miscela e ne alza il
+punto di congelamento:
+
+    T(t) = T_f(m_w + m_eq + m_amb(t)) + (T_s − T_eq) · e^(−t/τ)
+
+A `t = 0` vale `T_s`. Per un drink già raffreddato (shaken, stirred) il
+transitorio è nullo e resta la deriva: il drink si scalda lentamente pur
+stando sul ghiaccio, di quanto la diluizione gli concede.
+
 Limiti dichiarati: la superficie del ghiaccio non si riduce mentre fonde, il
 ghiaccio di servizio è a 0 °C (ghiaccio da bar "temperato"), il punto di
 congelamento usa la legge crioscopica ideale (accurata per le soluzioni da
 bar; oltre `FREEZING_POINT_FLOOR_C` è fuori dal suo dominio e si satura).
+Esaurito il ghiaccio, la temperatura resta quella dell'ultimo equilibrio: il
+riscaldamento del drink verso l'ambiente non è modellato.
 """
 
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 from ..balance import BalanceProfile, ServingProfile
 from ..entities import Recipe
@@ -137,24 +152,71 @@ def _equilibrium_melt_g(
     return (low + high) / 2.0
 
 
-def calculate_serving_profile(
-    recipe: Recipe,
-    balance: BalanceProfile,
-    consumption_minutes: float = DEFAULT_CONSUMPTION_MINUTES,
-) -> ServingProfile | None:
-    """Il drink dopo `consumption_minutes` sul ghiaccio di servizio.
+@dataclass(frozen=True, slots=True)
+class _ServingModel:
+    """Le grandezze del bilancio che non dipendono dal tempo di consumo.
 
-    Restituisce `None` per una ricetta servita senza ghiaccio: non c'è nulla
-    da calcolare, e un profilo identico al `BalanceProfile` direbbe il falso
-    ("diluizione da servizio: 0") invece di "non applicabile".
+    Separate dal campionamento perché una curva interroga lo stesso drink
+    decine di volte: l'equilibrio, che richiede la bisezione, si risolve
+    una volta sola.
     """
-    if not math.isfinite(consumption_minutes) or not (
-        0.0 < consumption_minutes <= MAX_CONSUMPTION_MINUTES
-    ):
-        raise InvalidServingConditionsError(
-            f"consumption_minutes must be within (0, {MAX_CONSUMPTION_MINUTES}], "
-            f"got {consumption_minutes!r}"
+
+    balance: BalanceProfile
+    water_g: float
+    solute_mol: float
+    start_c: float
+    equilibrium_c: float
+    equilibrium_melt_g: float
+    ice_g: float
+    time_constant_s: float
+
+    def at(self, minutes: float) -> ServingProfile:
+        balance = self.balance
+        seconds = minutes * 60.0
+        decay = math.exp(-seconds / self.time_constant_s)
+        cooling_melt_g = self.equilibrium_melt_g * (1.0 - decay)
+
+        ambient_melt_g = AMBIENT_HEAT_GAIN_W * seconds / LATENT_HEAT_FUSION_J_G
+        # Non può fondere più ghiaccio di quanto ce ne sia nel bicchiere.
+        ambient_melt_g = min(ambient_melt_g, max(self.ice_g - cooling_melt_g, 0.0))
+
+        melt_g = cooling_melt_g + ambient_melt_g
+        melt_ml = melt_g / WATER_DENSITY_G_ML
+        final_volume = balance.final_volume_ml + melt_ml
+        final_mass = balance.final_mass_g + melt_g
+
+        # L'equilibrio raggiunto dal raffreddamento, spostato dalla diluizione
+        # ambiente, più lo scarto che il transitorio non ha ancora smaltito.
+        temperature_c = (
+            freezing_point_c(
+                self.solute_mol, self.water_g + self.equilibrium_melt_g + ambient_melt_g
+            )
+            + (self.start_c - self.equilibrium_c) * decay
         )
+
+        return ServingProfile(
+            consumption_minutes=minutes,
+            initial_temperature_c=self.start_c,
+            equilibrium_temperature_c=self.equilibrium_c,
+            temperature_c=temperature_c,
+            cooling_melt_water_ml=cooling_melt_g / WATER_DENSITY_G_ML,
+            ambient_melt_water_ml=ambient_melt_g / WATER_DENSITY_G_ML,
+            melt_water_ml=melt_ml,
+            ice_mass_g=self.ice_g,
+            # Il `max` assorbe solo l'arrotondamento: per costruzione la
+            # fusione non supera il ghiaccio disponibile.
+            remaining_ice_g=max(self.ice_g - melt_g, 0.0),
+            final_volume_ml=final_volume,
+            final_mass_g=final_mass,
+            total_dilution_factor=(final_volume - balance.total_volume_ml)
+            / balance.total_volume_ml,
+            abv=balance.pure_alcohol_ml / final_volume,
+            brix=balance.sugar_mass_g / final_mass * 100.0,
+            acidity=balance.acid_mass_g / final_mass * 100.0,
+        )
+
+
+def _serving_model(recipe: Recipe, balance: BalanceProfile) -> _ServingModel | None:
     if recipe.serving_ice is ServingIce.NONE:
         return None
 
@@ -189,31 +251,67 @@ def calculate_serving_profile(
         ice_available_g=ice_available_g,
     )
 
-    seconds = consumption_minutes * 60.0
     exchange_area_m2 = SPECIFIC_SURFACE_M2_PER_M3[recipe.serving_ice] * ice_volume_ml * 1e-6
-    time_constant_s = mass_g * cp / (HEAT_TRANSFER_W_M2_K * exchange_area_m2)
-    cooling_melt_g = equilibrium_melt_g * (1.0 - math.exp(-seconds / time_constant_s))
 
-    ambient_melt_g = AMBIENT_HEAT_GAIN_W * seconds / LATENT_HEAT_FUSION_J_G
-    # Non può fondere più ghiaccio di quanto ce ne sia nel bicchiere.
-    ambient_melt_g = min(ambient_melt_g, max(ice_available_g - cooling_melt_g, 0.0))
-
-    melt_g = cooling_melt_g + ambient_melt_g
-    melt_ml = melt_g / WATER_DENSITY_G_ML
-    final_volume = balance.final_volume_ml + melt_ml
-    final_mass = mass_g + melt_g
-
-    return ServingProfile(
-        consumption_minutes=consumption_minutes,
-        initial_temperature_c=start_c,
-        equilibrium_temperature_c=freezing_point_c(solute_mol, water_g + equilibrium_melt_g),
-        cooling_melt_water_ml=cooling_melt_g / WATER_DENSITY_G_ML,
-        ambient_melt_water_ml=ambient_melt_g / WATER_DENSITY_G_ML,
-        melt_water_ml=melt_ml,
-        final_volume_ml=final_volume,
-        final_mass_g=final_mass,
-        total_dilution_factor=(final_volume - balance.total_volume_ml) / balance.total_volume_ml,
-        abv=balance.pure_alcohol_ml / final_volume,
-        brix=balance.sugar_mass_g / final_mass * 100.0,
-        acidity=balance.acid_mass_g / final_mass * 100.0,
+    return _ServingModel(
+        balance=balance,
+        water_g=water_g,
+        solute_mol=solute_mol,
+        start_c=start_c,
+        equilibrium_c=freezing_point_c(solute_mol, water_g + equilibrium_melt_g),
+        equilibrium_melt_g=equilibrium_melt_g,
+        ice_g=ice_available_g,
+        time_constant_s=mass_g * cp / (HEAT_TRANSFER_W_M2_K * exchange_area_m2),
     )
+
+
+def calculate_serving_profile(
+    recipe: Recipe,
+    balance: BalanceProfile,
+    consumption_minutes: float = DEFAULT_CONSUMPTION_MINUTES,
+) -> ServingProfile | None:
+    """Il drink dopo `consumption_minutes` sul ghiaccio di servizio.
+
+    Restituisce `None` per una ricetta servita senza ghiaccio: non c'è nulla
+    da calcolare, e un profilo identico al `BalanceProfile` direbbe il falso
+    ("diluizione da servizio: 0") invece di "non applicabile".
+    """
+    if not math.isfinite(consumption_minutes) or not (
+        0.0 < consumption_minutes <= MAX_CONSUMPTION_MINUTES
+    ):
+        raise InvalidServingConditionsError(
+            f"consumption_minutes must be within (0, {MAX_CONSUMPTION_MINUTES}], "
+            f"got {consumption_minutes!r}"
+        )
+    model = _serving_model(recipe, balance)
+    return None if model is None else model.at(consumption_minutes)
+
+
+def calculate_serving_curve(
+    recipe: Recipe,
+    balance: BalanceProfile,
+    *,
+    span_minutes: float,
+    step_minutes: float,
+) -> tuple[ServingProfile, ...] | None:
+    """Il drink sul ghiaccio di servizio, campionato ogni `step_minutes`.
+
+    Il primo punto è `t = 0`, il drink appena servito: senza di esso la
+    curva partirebbe già diluita, e il tratto più ripido — quello di un
+    built che si raffredda — mancherebbe proprio dove conta. `None`, come
+    per il profilo singolo, se la ricetta è servita senza ghiaccio.
+    """
+    if not (math.isfinite(span_minutes) and math.isfinite(step_minutes)) or not (
+        0.0 < step_minutes <= span_minutes <= MAX_CONSUMPTION_MINUTES
+    ):
+        raise InvalidServingConditionsError(
+            f"the serving curve needs 0 < step <= span <= {MAX_CONSUMPTION_MINUTES} minutes, "
+            f"got step={step_minutes!r}, span={span_minutes!r}"
+        )
+    model = _serving_model(recipe, balance)
+    if model is None:
+        return None
+    # La tolleranza evita di perdere l'ultimo campione quando `span / step`
+    # è un intero che la virgola mobile rappresenta come 29.999…
+    samples = math.floor(span_minutes / step_minutes + 1e-9)
+    return tuple(model.at(index * step_minutes) for index in range(samples + 1))

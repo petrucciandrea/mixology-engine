@@ -1,38 +1,51 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { BalanceReadout } from "@/components/studio/BalanceReadout";
-import { DrinkCanvas } from "@/components/studio/DrinkCanvas";
-import { FlavorRadar } from "@/components/studio/FlavorRadar";
-import { IngredientPicker } from "@/components/studio/IngredientPicker";
+import { CommandStrip } from "@/components/studio/CommandStrip";
+import { DilutionCurve } from "@/components/studio/DilutionCurve";
+import { DosePanel } from "@/components/studio/DosePanel";
+import { FlavorBars } from "@/components/studio/FlavorBars";
+import { GlassStage } from "@/components/studio/GlassStage";
 import { MatcherPanel } from "@/components/studio/MatcherPanel";
-import { RecipeBook } from "@/components/studio/RecipeBook";
-import { RecipeBuilder } from "@/components/studio/RecipeBuilder";
-import { SolverPanel } from "@/components/studio/SolverPanel";
-import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { PanelDock, type DockPanel } from "@/components/studio/PanelDock";
+import { PantryPanel } from "@/components/studio/PantryPanel";
+import { RecipeBookPanel } from "@/components/studio/RecipeBookPanel";
+import { StudioHeader } from "@/components/studio/StudioHeader";
 import { useRecipe } from "@/hooks/useRecipe";
 import { useRecipeBook } from "@/hooks/useRecipeBook";
+import { useSolver } from "@/hooks/useSolver";
 import { ApiError, listIngredients } from "@/lib/api";
-import type { Ingredient, Recipe } from "@/types/api";
+import type {
+  DilutionMethod,
+  GlassType,
+  Ingredient,
+  Recipe,
+  ServingIce,
+} from "@/types/api";
 
 export default function StudioPage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [pantryError, setPantryError] = useState<string | null>(null);
   const [isLoadingPantry, setIsLoadingPantry] = useState(true);
+  const [panel, setPanel] = useState<DockPanel | null>(null);
+  /** Il minuto scelto sulla curva di servizio: 0 = appena servito. */
+  const [minutes, setMinutes] = useState(0);
 
   const recipe = useRecipe("Ricetta senza nome");
   const book = useRecipeBook();
+  const solver = useSolver({
+    recipeInput: recipe.recipeInput,
+    doses: recipe.doses,
+    onApply: recipe.applyVolumes,
+  });
 
   useEffect(() => {
     listIngredients({ limit: 200 })
       .then((page) => setIngredients(page.items))
       .catch((cause: unknown) => {
         setPantryError(
-          cause instanceof ApiError
-            ? cause.message
-            : "Impossibile caricare la dispensa",
+          cause instanceof ApiError ? cause.message : "Impossibile caricare la dispensa",
         );
       })
       .finally(() => setIsLoadingPantry(false));
@@ -43,7 +56,69 @@ export default function StudioPage() {
     [recipe.doses],
   );
 
-  const totalVolumeMl = recipe.doses.reduce((sum, dose) => sum + dose.volumeMl, 0);
+  // Ogni modifica che cambia il problema da ottimizzare passa di qui: il
+  // solver deve sapere che un esito in corso o in revisione non descrive
+  // più la ricetta sul banco. Nome e famiglia non entrano nel calcolo.
+  const { invalidate, clear } = solver;
+  const { setVolume, addIngredient, removeIngredient, setMethod, setServingIce, setGlass } =
+    recipe;
+
+  const editVolume = useCallback(
+    (ingredientId: string, volumeMl: number) => {
+      invalidate();
+      setVolume(ingredientId, volumeMl);
+    },
+    [invalidate, setVolume],
+  );
+  const addToRecipe = useCallback(
+    (ingredient: Ingredient) => {
+      invalidate();
+      addIngredient(ingredient);
+      setPanel(null);
+    },
+    [invalidate, addIngredient],
+  );
+  const removeFromRecipe = useCallback(
+    (ingredientId: string) => {
+      invalidate();
+      removeIngredient(ingredientId);
+    },
+    [invalidate, removeIngredient],
+  );
+  const changeMethod = useCallback(
+    (method: DilutionMethod) => {
+      invalidate();
+      setMethod(method);
+    },
+    [invalidate, setMethod],
+  );
+  const changeServingIce = useCallback(
+    (ice: ServingIce) => {
+      invalidate();
+      setServingIce(ice);
+    },
+    [invalidate, setServingIce],
+  );
+  const changeGlass = useCallback(
+    (glass: GlassType | null) => {
+      invalidate();
+      setGlass(glass);
+    },
+    [invalidate, setGlass],
+  );
+
+  function loadRecipe(target: Recipe) {
+    clear();
+    recipe.loadRecipe(target);
+    setMinutes(0);
+    setPanel(null);
+  }
+
+  function resetRecipe() {
+    clear();
+    recipe.reset();
+    setMinutes(0);
+  }
 
   // Il nome vuoto lo rifiuterebbe comunque il dominio: disabilitare il
   // pulsante evita un giro al backend solo per sentirselo dire.
@@ -63,141 +138,130 @@ export default function StudioPage() {
     if (deleted && target.id === recipe.recipeId) recipe.forgetRecipeId();
   }
 
+  // Il minuto scelto vale finché la curva lo contiene; senza ghiaccio non
+  // c'è un "dopo" da mostrare e il bicchiere torna al drink appena servito.
+  const curve = recipe.servingCurve;
+  const moment =
+    curve !== null && minutes > 0
+      ? (curve.find((point) => point.consumption_minutes === minutes) ?? null)
+      : null;
+
+  // Con il backend spento dispensa e ricettario falliscono con lo stesso
+  // messaggio: si mostra una volta sola, con la chiave della sua fonte.
+  const errors = (
+    [
+      ["pantry", pantryError],
+      ["book", book.error],
+      ["recipe", recipe.error],
+    ] as const
+  ).filter(
+    ([, message], index, all): boolean =>
+      message !== null && all.findIndex(([, other]) => other === message) === index,
+  );
+
   return (
-    <div className="mx-auto flex min-h-screen max-w-[1500px] flex-col gap-6 px-4 py-6 lg:px-6">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
-        <div className="flex flex-col gap-1">
-          <span className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-accent">
-            Mixology Engine
-          </span>
-          <h1 className="font-display text-2xl leading-tight sm:text-3xl">
-            Studio di bilanciamento
-          </h1>
-        </div>
+    <div className="tabular mx-auto flex min-h-screen max-w-[1500px] flex-col gap-4 px-4 pb-7 pt-5 lg:px-6">
+      <StudioHeader
+        name={recipe.name}
+        onNameChange={recipe.setName}
+        isStored={recipe.recipeId !== null}
+        canSave={canSave}
+        onSave={(asNew) => void saveRecipe(asNew)}
+        onReset={resetRecipe}
+      />
 
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.12em] text-muted">
-              Nome della ricetta
-            </span>
-            <input
-              value={recipe.name}
-              onChange={(event) => recipe.setName(event.target.value)}
-              className="h-9 w-56 rounded-md border border-line bg-surface-2 px-3 text-sm focus:border-accent focus:outline-none"
-            />
-          </label>
-          <Button variant="primary" disabled={!canSave} onClick={() => void saveRecipe(false)}>
-            {recipe.recipeId === null ? "Salva" : "Aggiorna"}
-          </Button>
-          {recipe.recipeId !== null && (
-            <Button disabled={!canSave} onClick={() => void saveRecipe(true)}>
-              Salva come nuova
-            </Button>
+      {errors.map(([source, message]) => (
+        <p
+          key={source}
+          role="alert"
+          className="rounded-lg border border-alert/30 bg-alert-soft px-4 py-3 text-sm text-alert"
+        >
+          {message}
+          {source === "pantry" && (
+            <>
+              . Verifica che lo stack sia avviato (<code>make up</code>) e che la dispensa sia
+              popolata (<code>make seed</code>).
+            </>
           )}
-          <Button variant="ghost" onClick={recipe.reset}>
-            Nuova
-          </Button>
-        </div>
-      </header>
-
-      {pantryError !== null && (
-        <p className="rounded-md border border-alert/30 bg-alert-soft px-4 py-3 text-sm text-alert">
-          {pantryError}. Verifica che lo stack sia avviato (<code>make up</code>) e
-          che la dispensa sia popolata (<code>make seed</code>).
         </p>
-      )}
+      ))}
 
-      {book.error !== null && (
-        <p className="rounded-md border border-alert/30 bg-alert-soft px-4 py-3 text-sm text-alert">
-          {book.error}
-        </p>
-      )}
+      <CommandStrip
+        profile={recipe.profile}
+        glassFit={recipe.glassFit}
+        isCalculating={recipe.isCalculating}
+        solver={solver}
+      />
 
-      {recipe.error !== null && (
-        <p className="rounded-md border border-alert/30 bg-alert-soft px-4 py-3 text-sm text-alert">
-          {recipe.error}
-        </p>
-      )}
-
-      {/* Tre colonne: si compone a sinistra, si legge il risultato al
-          centro, si chiede aiuto alla macchina a destra. È l'ordine in cui
-          si lavora davvero, e sotto i 1024px diventa una colonna sola. */}
-      <main className="grid flex-1 grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(260px,0.9fr)_minmax(320px,1.1fr)_minmax(280px,1fr)]">
-        <div className="flex max-h-[calc(100vh-11rem)] flex-col gap-5 lg:sticky lg:top-6">
-          <RecipeBook
-            recipes={book.recipes}
-            activeId={recipe.recipeId}
-            isLoading={book.isLoading}
-            onLoad={recipe.loadRecipe}
-            onDelete={(target) => void deleteRecipe(target)}
-          />
-          <IngredientPicker
-            ingredients={ingredients}
-            selectedIds={selectedIds}
-            onAdd={recipe.addIngredient}
-            isLoading={isLoadingPantry}
-          />
-        </div>
-
-        <div className="flex flex-col gap-5">
-          <RecipeBuilder
-            doses={recipe.doses}
-            method={recipe.method}
-            servingIce={recipe.servingIce}
-            glass={recipe.glass}
-            family={recipe.family}
-            totalVolumeMl={totalVolumeMl}
-            onMethodChange={recipe.setMethod}
-            onServingIceChange={recipe.setServingIce}
-            onGlassChange={recipe.setGlass}
-            onFamilyChange={recipe.setFamily}
-            onVolumeChange={recipe.setVolume}
-            onRemove={recipe.removeIngredient}
-          />
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Nel bicchiere</CardTitle>
-            </CardHeader>
-            <CardBody className="grid grid-cols-1 gap-6 sm:grid-cols-[auto_1fr]">
-              <div className="w-full sm:w-[220px]">
-                <DrinkCanvas
-                  doses={recipe.doses}
-                  profile={recipe.profile}
-                  glass={recipe.glass}
-                  glassFit={recipe.glassFit}
-                />
-              </div>
-              <BalanceReadout
-                profile={recipe.profile}
-                servingProfile={recipe.servingProfile}
-                glassFit={recipe.glassFit}
-                isCalculating={recipe.isCalculating}
+      {/* Quattro colonne nell'ordine in cui si lavora: si sceglie dal
+          cassetto, si dosa, si guarda il bicchiere, si legge cosa succede
+          nel tempo e nel sapore. Sotto i 1280px le ultime due si
+          affiancano sotto le prime, sotto i 1024px tutto va in colonna. */}
+      <main className="relative grid grid-cols-1 items-start gap-4 lg:grid-cols-2 xl:grid-cols-[52px_minmax(340px,410px)_minmax(340px,1fr)_minmax(320px,380px)]">
+        <PanelDock
+          open={panel}
+          onOpenChange={setPanel}
+          counts={{ book: book.recipes.length, pantry: ingredients.length }}
+          renderPanel={(open) =>
+            open === "book" ? (
+              <RecipeBookPanel
+                recipes={book.recipes}
+                activeId={recipe.recipeId}
+                isLoading={book.isLoading}
+                onLoad={loadRecipe}
+                onDelete={(target) => void deleteRecipe(target)}
               />
-            </CardBody>
-          </Card>
-        </div>
+            ) : open === "pantry" ? (
+              <PantryPanel
+                ingredients={ingredients}
+                selectedIds={selectedIds}
+                onAdd={addToRecipe}
+                isLoading={isLoadingPantry}
+              />
+            ) : (
+              <MatcherPanel doses={recipe.doses} onAdd={addToRecipe} />
+            )
+          }
+        />
 
-        <div className="flex flex-col gap-5">
-          <SolverPanel
-            doses={recipe.doses}
-            method={recipe.method}
-            servingIce={recipe.servingIce}
-            glass={recipe.glass}
-            recipeName={recipe.name}
-            onApply={recipe.applyVolumes}
+        <DosePanel
+          doses={recipe.doses}
+          method={recipe.method}
+          servingIce={recipe.servingIce}
+          glass={recipe.glass}
+          family={recipe.family}
+          glassFit={recipe.glassFit}
+          onMethodChange={changeMethod}
+          onServingIceChange={changeServingIce}
+          onGlassChange={changeGlass}
+          onFamilyChange={recipe.setFamily}
+          onVolumeChange={editVolume}
+          onRemove={removeFromRecipe}
+          onOpenPantry={() => setPanel("pantry")}
+        />
+
+        <GlassStage
+          doses={recipe.doses}
+          profile={recipe.profile}
+          glass={recipe.glass}
+          glassFit={recipe.glassFit}
+          servingIce={recipe.servingIce}
+          family={recipe.family}
+          moment={moment}
+        />
+
+        <div className="grid min-w-0 items-start gap-4 lg:col-span-2 lg:grid-cols-2 xl:col-span-1 xl:grid-cols-1">
+          <DilutionCurve
+            curve={curve}
+            reference={recipe.servingProfile}
+            minutes={minutes}
+            onMinutesChange={setMinutes}
+            hasDoses={recipe.doses.length > 0}
           />
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Profilo aromatico</CardTitle>
-            </CardHeader>
-            <CardBody>
-              <FlavorRadar doses={recipe.doses} />
-            </CardBody>
-          </Card>
-
-          <MatcherPanel doses={recipe.doses} onAdd={recipe.addIngredient} />
+          <FlavorBars
+            doses={recipe.doses}
+            before={solver.result !== null ? solver.before : null}
+          />
         </div>
       </main>
     </div>
