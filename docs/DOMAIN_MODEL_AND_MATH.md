@@ -37,7 +37,9 @@ Vale solo per le ricette con `serving_ice ≠ NONE` ed è un profilo **separato*
 - **Raffreddamento fino all'equilibrio:** $m_{eq}\,(L - c_w\,|T_f|) = M\,c_p\,(T_s - T_f)$, con $L = 334$ J/g; $T_f$ dipende da $m_{eq}$ (si risolve per bisezione). $T_s = T_f$ per shaken/stirred (già raffreddati: termine nullo), $T_s = 20$ °C per built.
 - **Cinetica (il tipo di ghiaccio entra qui):** $m_{cool}(t) = m_{eq}\,(1 - e^{-t/\tau})$, con $\tau = \dfrac{M\,c_p}{h\,A}$, $A = (S/V)_{tipo}\cdot V_{ghiaccio}$. Superfici specifiche $S/V = 6/a$: cubetti 25 mm, cubo grosso 50 mm, tritato ~6 mm.
 - **Calore ambiente:** $m_{amb}(t) = P\,t / L$, con $P = 6$ W.
-- **Totale:** $V_{serving} = V_{final} + m_{cool} + m_{amb}$, limitato al ghiaccio disponibile ($V_{ghiaccio} = V_{final}$); ABV, Brix e acidità si ricalcolano sulle nuove masse e volumi.
+- **Totale:** $V_{serving} = V_{final} + m_{cool} + m_{amb}$, limitato al ghiaccio disponibile ($V_{ghiaccio} = V_{final}$); ABV, Brix e acidità si ricalcolano sulle nuove masse e volumi. Il ghiaccio residuo è $m_{ghiaccio} - m_{cool} - m_{amb}$.
+- **Temperatura:** $T(t) = T_f(m_w + m_{eq} + m_{amb}(t)) + (T_s - T_{eq})\,e^{-t/\tau}$. Il transitorio decade con la stessa $\tau$ della fusione da raffreddamento; il primo termine è l'equilibrio che si sposta perché l'acqua di fusione ambiente diluisce la miscela. A $t = 0$ vale $T_s$; per shaken/stirred il transitorio è nullo e il drink si scalda lentamente seguendo la diluizione. Esaurito il ghiaccio, il riscaldamento verso l'ambiente non è modellato.
+- **Curva di servizio:** lo stesso profilo campionato ogni minuto da $t = 0$ (il drink appena servito) a 30 minuti; accompagna ogni risposta di `/balance` come `serving_curve`.
 
 Ipotesi tarabili (non costanti fisiche): $h = 300$ W/m²K, $P = 6$ W, volume di ghiaccio = volume del drink, dimensioni caratteristiche dei tipi di ghiaccio, ghiaccio a 0 °C, superficie costante durante la fusione.
 
@@ -45,7 +47,7 @@ Ipotesi tarabili (non costanti fisiche): $h = 300$ W/m²K, $P = 6$ W, volume di 
 `Recipe.glass` è un `GlassType` **facoltativo**. Se presente e con capienza nota (tutto tranne `OTHER`), pone un tetto al volume del drink servito. Ipotesi dichiarate in `domain/services/glassware.py`:
 
 - **Volume utile:** $V_{util} = C \cdot 0.9$, con $C$ capienza a filo bordo (bordo libero del 10%).
-- **Con ghiaccio di servizio** il solido occupa una quota $s = 0.35$ dello spazio utile: $V_{max} = V_{util}\,(1 - s)$. Senza ghiaccio $V_{max} = V_{util}$.
+- **Con ghiaccio di servizio** il solido occupa una quota $s = 0.35$ dello spazio utile: $V_{max} = V_{util}\,(1 - s)$, $V_{ghiaccio} = V_{util}\,s$ (`GlassFit.ice_volume_ml`). Senza ghiaccio $V_{max} = V_{util}$ e $V_{ghiaccio} = 0$.
 - **Vincolo:** $V_{final} \le V_{max}$ (disuguaglianza SLSQP, normalizzata su $V_{max}$). Se è presente anche il target `final_volume_ml` (uguaglianza) e $V_{target} > V_{max}$ il problema è `INFEASIBLE`.
 - **Riempimento:** $\text{fill} = V_{final} / V_{max}$; oltre 1 il drink trabocca (`GlassFit.overflows`).
 

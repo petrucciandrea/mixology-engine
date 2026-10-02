@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import replace
+from itertools import pairwise
 
 import pytest
 from hypothesis import given, settings
@@ -16,14 +17,20 @@ from hypothesis import given, settings
 from app.domain.entities import Ingredient, Recipe, RecipeIngredient
 from app.domain.enums import DilutionMethod, IngredientCategory, ServingIce
 from app.domain.errors import InvalidServingConditionsError
-from app.domain.services.balance_calculator import calculate_balance
+from app.domain.services.balance_calculator import WATER_DENSITY_G_ML, calculate_balance
 from app.domain.services.serving_dilution import (
     AMBIENT_HEAT_GAIN_W,
     AMBIENT_TEMPERATURE_C,
     CP_WATER_J_G_K,
+    ETHANOL_DENSITY_G_ML,
+    ETHANOL_MOLAR_MASS_G_MOL,
+    FREEZING_POINT_FLOOR_C,
     HEAT_TRANSFER_W_M2_K,
+    ICE_DENSITY_G_ML,
     LATENT_HEAT_FUSION_J_G,
     MAX_CONSUMPTION_MINUTES,
+    SUCROSE_MOLAR_MASS_G_MOL,
+    calculate_serving_curve,
     calculate_serving_profile,
     freezing_point_c,
 )
@@ -154,6 +161,142 @@ class TestServingProfile:
         assert profile.melt_water_ml == pytest.approx(
             profile.cooling_melt_water_ml + profile.ambient_melt_water_ml
         )
+
+
+class TestServingTemperature:
+    def test_built_water_cools_exponentially_towards_zero(self, water: Ingredient) -> None:
+        """Senza soluti `T_f = 0 °C` a ogni diluizione: resta il transitorio puro,
+        `T(t) = T_s · e^(−t/τ)`."""
+        recipe = _water_recipe(water, ServingIce.LARGE_CUBE, DilutionMethod.BUILT)
+        profile = calculate_serving_profile(recipe, calculate_balance(recipe), 1.0)
+
+        assert profile is not None
+        # Cubo grosso: A = 120 m⁻¹ · 1e-4 m³ = 0.012 m², τ = 418 / 3.6 ≈ 116.1 s.
+        tau = 100.0 * CP_WATER_J_G_K / (HEAT_TRANSFER_W_M2_K * 120.0 * 1e-4)
+        assert profile.temperature_c == pytest.approx(
+            AMBIENT_TEMPERATURE_C * math.exp(-60.0 / tau), rel=1e-9
+        )
+
+    def test_a_chilled_drink_warms_as_ambient_melt_dilutes_it(self, daiquiri: Recipe) -> None:
+        """Shakerato: nessun transitorio, la temperatura è il punto di
+        congelamento della miscela diluita dall'acqua di fusione ambiente."""
+        recipe = replace(daiquiri, serving_ice=ServingIce.CUBES)
+        balance = calculate_balance(recipe)
+        profile = calculate_serving_profile(recipe, balance, 10.0)
+
+        assert profile is not None
+        ethanol_g = balance.pure_alcohol_ml * ETHANOL_DENSITY_G_ML
+        water_g = balance.final_mass_g - ethanol_g - balance.sugar_mass_g
+        solute_mol = (
+            ethanol_g / ETHANOL_MOLAR_MASS_G_MOL + balance.sugar_mass_g / SUCROSE_MOLAR_MASS_G_MOL
+        )
+        ambient_melt_g = profile.ambient_melt_water_ml * WATER_DENSITY_G_ML
+        assert profile.temperature_c == pytest.approx(
+            freezing_point_c(solute_mol, water_g + ambient_melt_g)
+        )
+        assert profile.initial_temperature_c < profile.temperature_c < 0.0
+
+
+class TestServingIce:
+    def test_the_glass_holds_as_much_ice_as_drink(self, water: Ingredient) -> None:
+        recipe = _water_recipe(water, ServingIce.CUBES, DilutionMethod.BUILT)
+        profile = calculate_serving_profile(recipe, calculate_balance(recipe), 10.0)
+
+        assert profile is not None
+        # 100 ml di drink → 100 ml di ghiaccio → 91.7 g.
+        assert profile.ice_mass_g == pytest.approx(100.0 * ICE_DENSITY_G_ML)
+        assert profile.remaining_ice_g == pytest.approx(
+            profile.ice_mass_g - profile.melt_water_ml * WATER_DENSITY_G_ML
+        )
+
+
+class TestServingCurve:
+    def test_no_ice_means_no_curve(self, daiquiri: Recipe) -> None:
+        curve = calculate_serving_curve(
+            daiquiri, calculate_balance(daiquiri), span_minutes=30.0, step_minutes=1.0
+        )
+        assert curve is None
+
+    def test_samples_the_span_from_the_moment_of_serving(self, water: Ingredient) -> None:
+        recipe = _water_recipe(water, ServingIce.CUBES, DilutionMethod.BUILT)
+        curve = calculate_serving_curve(
+            recipe, calculate_balance(recipe), span_minutes=30.0, step_minutes=1.0
+        )
+
+        assert curve is not None
+        assert [point.consumption_minutes for point in curve] == [float(m) for m in range(31)]
+
+    def test_the_first_point_is_the_drink_as_served(self, water: Ingredient) -> None:
+        recipe = _water_recipe(water, ServingIce.CUBES, DilutionMethod.BUILT)
+        balance = calculate_balance(recipe)
+        curve = calculate_serving_curve(recipe, balance, span_minutes=10.0, step_minutes=2.5)
+
+        assert curve is not None
+        served = curve[0]
+        assert served.melt_water_ml == 0.0
+        assert served.temperature_c == pytest.approx(served.initial_temperature_c)
+        assert served.abv == pytest.approx(balance.abv_post)
+        assert served.remaining_ice_g == pytest.approx(served.ice_mass_g)
+
+    def test_every_later_point_is_the_profile_at_that_minute(self, white_rum: Ingredient) -> None:
+        """La curva è lo stesso modello campionato, non un'approssimazione."""
+        recipe = Recipe(
+            id="rum",
+            name="Rum on ice",
+            dilution_method=DilutionMethod.BUILT,
+            serving_ice=ServingIce.CUBES,
+            ingredients=(RecipeIngredient(ingredient=white_rum, volume_ml=50.0),),
+        )
+        balance = calculate_balance(recipe)
+        curve = calculate_serving_curve(recipe, balance, span_minutes=6.0, step_minutes=1.5)
+
+        assert curve is not None
+        for point in curve[1:]:
+            assert point == calculate_serving_profile(recipe, balance, point.consumption_minutes)
+
+    @pytest.mark.parametrize(
+        ("span", "step"),
+        [
+            (30.0, 0.0),
+            (30.0, -1.0),
+            (MAX_CONSUMPTION_MINUTES + 1, 1.0),
+            (5.0, 10.0),
+            (math.nan, 1.0),
+            (30.0, math.inf),
+        ],
+    )
+    def test_rejects_impossible_grids(self, water: Ingredient, span: float, step: float) -> None:
+        recipe = _water_recipe(water, ServingIce.CUBES, DilutionMethod.BUILT)
+        with pytest.raises(InvalidServingConditionsError):
+            calculate_serving_curve(
+                recipe, calculate_balance(recipe), span_minutes=span, step_minutes=step
+            )
+
+
+@given(recipe=recipes())
+@settings(max_examples=200)
+def test_serving_curve_only_moves_one_way(recipe: Recipe) -> None:
+    """Il ghiaccio fonde e basta: l'acqua cresce, ghiaccio e ABV calano, e la
+    temperatura non supera mai quella di partenza né lo zero."""
+    curve = calculate_serving_curve(
+        recipe, calculate_balance(recipe), span_minutes=30.0, step_minutes=1.0
+    )
+
+    if recipe.serving_ice is ServingIce.NONE:
+        assert curve is None
+        return
+
+    assert curve is not None
+    for before, after in pairwise(curve):
+        assert after.melt_water_ml >= before.melt_water_ml - 1e-9
+        assert after.remaining_ice_g <= before.remaining_ice_g + 1e-9
+        assert after.abv <= before.abv + 1e-12
+
+    for point in curve:
+        assert math.isfinite(point.temperature_c)
+        assert point.temperature_c >= FREEZING_POINT_FLOOR_C
+        assert point.temperature_c <= max(point.initial_temperature_c, 0.0) + 1e-9
+        assert 0.0 <= point.remaining_ice_g <= point.ice_mass_g
 
 
 @given(recipe=recipes())

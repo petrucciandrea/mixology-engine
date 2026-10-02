@@ -151,9 +151,12 @@ class ServingProfileOut(BaseModel):
     consumption_minutes: float
     initial_temperature_c: float
     equilibrium_temperature_c: float
+    temperature_c: float
     cooling_melt_water_ml: float
     ambient_melt_water_ml: float
     melt_water_ml: float
+    ice_mass_g: float
+    remaining_ice_g: float
     final_volume_ml: float
     final_mass_g: float
     total_dilution_factor: float
@@ -168,9 +171,12 @@ class ServingProfileOut(BaseModel):
             consumption_minutes=profile.consumption_minutes,
             initial_temperature_c=profile.initial_temperature_c,
             equilibrium_temperature_c=profile.equilibrium_temperature_c,
+            temperature_c=profile.temperature_c,
             cooling_melt_water_ml=profile.cooling_melt_water_ml,
             ambient_melt_water_ml=profile.ambient_melt_water_ml,
             melt_water_ml=profile.melt_water_ml,
+            ice_mass_g=profile.ice_mass_g,
+            remaining_ice_g=profile.remaining_ice_g,
             final_volume_ml=profile.final_volume_ml,
             final_mass_g=profile.final_mass_g,
             total_dilution_factor=profile.total_dilution_factor,
@@ -186,6 +192,7 @@ class GlassFitOut(BaseModel):
 
     capacity_ml: float
     max_volume_ml: float
+    ice_volume_ml: float
     volume_ml: float
     fill_ratio: float
     overflows: bool
@@ -195,6 +202,7 @@ class GlassFitOut(BaseModel):
         return cls(
             capacity_ml=fit.capacity_ml,
             max_volume_ml=fit.max_volume_ml,
+            ice_volume_ml=fit.ice_volume_ml,
             volume_ml=fit.volume_ml,
             fill_ratio=fit.fill_ratio,
             overflows=fit.overflows,
@@ -204,13 +212,16 @@ class GlassFitOut(BaseModel):
 class BalanceOut(BaseModel):
     """Risposta del calcolo: la ricetta risolta e i suoi profili.
 
-    `serving_profile` è `null` per le ricette servite senza ghiaccio,
-    `glass_fit` per quelle senza bicchiere (o con bicchiere senza capienza).
+    `serving_profile` e `serving_curve` sono `null` per le ricette servite
+    senza ghiaccio, `glass_fit` per quelle senza bicchiere (o con bicchiere
+    senza capienza). `serving_curve` è lo stesso profilo di servizio
+    campionato al minuto dal momento del servizio (`t = 0`) a 30 minuti.
     """
 
     recipe: RecipeOut
     profile: BalanceProfileOut
     serving_profile: ServingProfileOut | None = None
+    serving_curve: list[ServingProfileOut] | None = None
     glass_fit: GlassFitOut | None = None
 
     @classmethod
@@ -221,6 +232,11 @@ class BalanceOut(BaseModel):
             serving_profile=(
                 ServingProfileOut.from_entity(result.serving)
                 if result.serving is not None
+                else None
+            ),
+            serving_curve=(
+                [ServingProfileOut.from_entity(point) for point in result.serving_curve]
+                if result.serving_curve is not None
                 else None
             ),
             glass_fit=(

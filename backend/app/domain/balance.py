@@ -85,11 +85,17 @@ class ServingProfile:
     # --- Termodinamica ---
     initial_temperature_c: float
     equilibrium_temperature_c: float
+    #: Temperatura del drink a `consumption_minutes`.
+    temperature_c: float
 
     # --- Acqua di fusione aggiunta dal ghiaccio di servizio ---
     cooling_melt_water_ml: float
     ambient_melt_water_ml: float
     melt_water_ml: float
+
+    # --- Ghiaccio nel bicchiere ---
+    ice_mass_g: float
+    remaining_ice_g: float
 
     # --- Il drink a fine consumo ---
     final_volume_ml: float

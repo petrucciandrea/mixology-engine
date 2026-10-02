@@ -206,6 +206,26 @@ class TestBalanceApi:
         assert serving["consumption_minutes"] == 5
         assert serving["melt_water_ml"] > 0
         assert serving["abv"] < on_ice.json()["profile"]["abv_post"]
+        assert serving["temperature_c"] > serving["initial_temperature_c"]
+        assert 0 < serving["remaining_ice_g"] < serving["ice_mass_g"]
+
+    async def test_balance_on_ice_carries_the_serving_curve(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        payload = daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20))
+
+        without_ice = await client.post(f"{API}/balance", json=payload)
+        assert without_ice.json()["serving_curve"] is None
+
+        response = await client.post(f"{API}/balance", json={**payload, "serving_ice": "CUBES"})
+        on_ice = response.json()
+        curve = on_ice["serving_curve"]
+        # Mezz'ora al minuto, dal drink appena servito.
+        assert [point["consumption_minutes"] for point in curve] == list(range(31))
+        assert curve[0]["melt_water_ml"] == 0
+        assert curve[0]["abv"] == pytest.approx(on_ice["profile"]["abv_post"])
+        # Il campione a 10 minuti è il profilo di servizio di default.
+        assert curve[10] == on_ice["serving_profile"]
 
     async def test_implausible_consumption_time_is_a_422(
         self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
@@ -470,8 +490,17 @@ class TestRecipesApi:
         coupe = (await client.post(f"{API}/balance", json={**payload, "glass": "COUPE"})).json()
         assert coupe["glass_fit"]["capacity_ml"] == 200
         assert coupe["glass_fit"]["max_volume_ml"] == pytest.approx(180.0)
+        assert coupe["glass_fit"]["ice_volume_ml"] == 0
         assert coupe["glass_fit"]["volume_ml"] == pytest.approx(coupe["profile"]["final_volume_ml"])
         assert coupe["glass_fit"]["overflows"] is False
+
+        rocks = (
+            await client.post(
+                f"{API}/balance", json={**payload, "glass": "ROCKS", "serving_ice": "CUBES"}
+            )
+        ).json()
+        # 350 × 0.9 × 0.35 = 110.25 ml di ghiaccio.
+        assert rocks["glass_fit"]["ice_volume_ml"] == pytest.approx(110.25)
 
         shot = (await client.post(f"{API}/balance", json={**payload, "glass": "SHOT"})).json()
         assert shot["glass_fit"]["overflows"] is True
