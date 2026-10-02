@@ -16,3 +16,4 @@ dichiara quale sostituisce.
 | [0007](0007-matcher-similarita-e-affinita.md) | Il matcher tiene separate similarità (sostituzione) e affinità (abbinamento) | Accettata |
 | [0008](0008-ghiaccio-di-servizio.md) | Il ghiaccio di servizio è un attributo della ricetta, separato dalla tecnica | Accettata |
 | [0009](0009-bicchiere-di-servizio-e-capienza.md) | Il bicchiere è un attributo facoltativo della ricetta e ne limita il volume | Accettata |
+| [0010](0010-pubblicazione-su-piani-gratuiti.md) | Pubblicazione su piani gratuiti: Vercel, Render, Neon, senza Redis | Accettata |

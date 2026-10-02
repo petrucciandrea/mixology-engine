@@ -60,7 +60,8 @@ jobs:
         run: uv run --no-sync alembic upgrade head
 
       - name: Seed
-        # Idempotente: ingredienti e ricette già presenti vengono saltati.
+        # Idempotente, ma riallinea i classici al seed (ghiaccio di servizio,
+        # dosi delle ricette riviste): vedi le conseguenze in ADR-0010.
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
         run: uv run --no-sync python -m scripts.seed
