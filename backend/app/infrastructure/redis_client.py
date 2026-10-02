@@ -17,7 +17,13 @@ from app.core.config import get_settings
 
 @lru_cache(maxsize=1)
 def get_pool() -> ConnectionPool:
-    return ConnectionPool.from_url(get_settings().redis_url, decode_responses=True)
+    url = get_settings().redis_url
+    if url is None:
+        # Chi arriva qui ha saltato il controllo del composition root
+        # (`api/deps.get_redis`): meglio un errore che nomina la causa di
+        # un pool costruito su un URL assente.
+        raise RuntimeError("REDIS_URL non configurato: Redis è disattivato")
+    return ConnectionPool.from_url(url, decode_responses=True)
 
 
 async def redis_scope() -> AsyncGenerator[Redis, None]:

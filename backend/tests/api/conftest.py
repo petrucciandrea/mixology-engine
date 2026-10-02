@@ -112,6 +112,32 @@ async def client(
 
 
 @pytest_asyncio.fixture
+async def client_without_redis(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """L'app come gira in produzione sui piani gratuiti: Redis non configurato.
+
+    `get_redis` restituisce `None` esattamente come farebbe con
+    `REDIS_URL` vuota; il resto della catena — composition root, cache
+    nulla, health check — resta quello reale.
+    """
+    app = create_app()
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    async def override_redis() -> AsyncGenerator[None, None]:
+        yield None
+
+    app.dependency_overrides[get_session] = override_session
+    app.dependency_overrides[get_redis] = override_redis
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as http:
+        yield http
+
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
 async def rum_id(client: AsyncClient) -> str:
     return await create_ingredient(
         client,

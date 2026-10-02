@@ -45,9 +45,10 @@ from app.application.use_cases.recipes import (
     ListRecipesUseCase,
     UpdateRecipeUseCase,
 )
+from app.core.config import get_settings
 from app.domain.matching import FlavorSearchRepository, GraphSnapshotCache
 from app.domain.repositories import IngredientRepository, RecipeRepository, UnitOfWork
-from app.infrastructure.cache import RedisGraphSnapshotCache
+from app.infrastructure.cache import NullGraphSnapshotCache, RedisGraphSnapshotCache
 from app.infrastructure.db.repositories import (
     SqlAlchemyFlavorSearchRepository,
     SqlAlchemyIngredientRepository,
@@ -65,13 +66,22 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-async def get_redis() -> AsyncGenerator[Redis, None]:
+async def get_redis() -> AsyncGenerator[Redis | None, None]:
+    """Il client Redis, oppure `None` se Redis non è configurato.
+
+    Il controllo sta qui e non in `redis_scope`: decidere se una risorsa
+    esiste è compito del composition root, e così il pool non viene mai
+    costruito su un URL assente.
+    """
+    if get_settings().redis_url is None:
+        yield None
+        return
     async for client in redis_scope():
         yield client
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-RedisDep = Annotated[Redis, Depends(get_redis)]
+RedisDep = Annotated[Redis | None, Depends(get_redis)]
 
 
 # --- Porte ---------------------------------------------------------------
@@ -94,6 +104,8 @@ def get_flavor_search_repository(session: SessionDep) -> FlavorSearchRepository:
 
 
 def get_graph_cache(redis: RedisDep) -> GraphSnapshotCache:
+    if redis is None:
+        return NullGraphSnapshotCache()
     return RedisGraphSnapshotCache(redis)
 
 
