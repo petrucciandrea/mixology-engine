@@ -15,7 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  # Nome unico fra i workflow: è il controllo obbligatorio del ruleset di
+  # `main` (vedi il commento in backend.yml).
+  frontend:
     runs-on: ubuntu-latest
 
     defaults:

@@ -17,7 +17,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  # Il nome del job è il nome del controllo che il ruleset di `main` rende
+  # obbligatorio: deve essere unico fra tutti i workflow, altrimenti un
+  # `check` verde del frontend potrebbe soddisfare quello del backend.
+  backend:
     # I container e l'immagine di sviluppo sono linux/amd64: usare lo stesso
     # runner evita che la CI verifichi un'architettura diversa da quella su
     # cui il progetto gira.
