@@ -29,44 +29,10 @@ girano senza copertura.
 Porte: studio `:3000`, API `:8000` (Swagger su `/docs`), health su `/health`
 (fuori da `/api/v1` di proposito). Porte host configurabili nel `.env`.
 
-## Architettura backend (`backend/app/`)
+## Backend
 
-Regola di dipendenza verso l'interno, verificabile:
-
-| Layer | Contiene | Può importare |
-|---|---|---|
-| `domain/` | Entità `@dataclass(frozen=True, slots=True)`, formule, tassonomia sapori, porte (`Protocol`), errori | solo stdlib |
-| `application/` | `solver/` (SciPy SLSQP), `matching/` (NetworkX), `use_cases/` | domain, SciPy, NetworkX |
-| `infrastructure/` | ORM SQLAlchemy async, mapper, repository, ricerca pgvector, cache Redis | domain |
-| `api/` | Router FastAPI, DTO Pydantic in `schemas/`, traduzione errori | tutto |
-| `api/deps.py` | **Composition root**: unico punto dove si sceglie l'adapter per ogni porta | tutto |
-
-Vincoli da rispettare:
-
-- **`domain/` non importa Pydantic, SQLAlchemy, FastAPI, SciPy, NumPy né
-  NetworkX.** Validazione negli `__post_init__` (un'entità che esiste è
-  valida); errori come sottoclassi di `DomainError` in `domain/errors.py`.
-- **DTO Pydantic solo in `api/schemas/`**, con conversione esplicita
-  (`from_entity` / `to_domain`). I range numerici dei DTO si leggono dalle
-  costanti del dominio (es. `MAX_BRIX`), non si riscrivono.
-- **Porte come `Protocol`** in `domain/repositories.py` e
-  `domain/matching.py`; gli adapter in `infrastructure/` non ereditano. La
-  conformità la verifica MyPy tramite le annotazioni di ritorno in
-  `api/deps.py`: una nuova porta si registra lì.
-- **Nessun `HTTPException` nei casi d'uso.** Si solleva un errore di dominio;
-  lo status code si decide solo in `api/errors.py` (`_STATUS_BY_ERROR`).
-- **Transazioni tramite `UnitOfWork`** nel caso d'uso, non nel router.
-- **Lavoro CPU-bound (solver, grafo) con `asyncio.to_thread`**; il calcolo
-  del solo profilo resta nella coroutine (ADR-0002).
-- **Una sola `Base` ORM** in `infrastructure/db/base.py`, da importare come
-  `from app.infrastructure.db import Base` (ADR-0003). Alembic usa
-  `asyncpg` e legge l'URL da `Settings`; l'estensione `vector` va creata a
-  mano nella migrazione. Le migrazioni devono avere un `downgrade`
-  funzionante: la CI esegue `alembic downgrade base`.
-- **Configurazione solo da `app/core/config.py`** (`get_settings()`); nessun
-  `os.environ` altrove.
-- MyPy `strict`: ogni funzione è tipizzata. SciPy/pgvector/NetworkX non hanno
-  stub e vanno incapsulati dietro firme tipizzate del progetto.
+Architettura a layer, vincoli, fisica, solver e test: `backend/CLAUDE.md`.
+Un cambio di DTO si riporta anche nel frontend.
 
 ## Decisioni di dominio da non sfumare
 
@@ -86,16 +52,6 @@ un nuovo ADR, non si riscrive). Le più vincolanti:
    è l'implementazione di riferimento: pgvector deve restituire gli stessi
    numeri.
 
-Fisica (formule in `docs/DOMAIN_MODEL_AND_MATH.md`): **ABV e densità
-lavorano sui volumi, Brix e acidità sulle masse** (volume × densità). ABV è
-una frazione in [0, 1], Brix in % peso, acidità in % p/v in [0, 10]. Sempre
-distinguere pre- e post-diluizione nei nomi. Niente formule approssimate o
-mock della fisica: si implementa il modello reale.
-
-Il solver restituisce sempre stato di convergenza, iterazioni e residui; è
-deterministico (multi-start a seed fisso); arrotonda i volumi al passo del
-dosatore e **ricalcola il profilo sui volumi arrotondati**.
-
 ## Lingua
 
 - **Codice in inglese** (ubiquitous language: entità, campi, metodi,
@@ -107,22 +63,6 @@ dosatore e **ricalcola il profilo sui volumi arrotondati**.
 - Etichette dell'interfaccia in italiano da bar (es. "Shakerato"), gli
   identificatori TypeScript restano in inglese.
 
-## Test (TDD)
-
-- Test per layer, ognuno con il suo `conftest.py`. `tests/conftest.py` resta
-  minimo e **non deve importare l'app**: i test unitari girano senza
-  database, Redis né variabili d'ambiente.
-- I valori attesi dei test a esempio si **calcolano a mano dalle formule**,
-  non si copiano da un'esecuzione. Le fixture usano ingredienti con valori
-  fisici realistici (`tests/unit/conftest.py`).
-- Invarianti fisiche con **Hypothesis** (`test_balance_properties.py`):
-  conservazione di soluti e alcol, ABV in [0, 1], nessun NaN, ecc. Una nuova
-  formula merita una proprietà, non solo esempi.
-- Integrazione: transazione annullata per test (`create_savepoint`), engine
-  con `NullPool` per test. API: app reale via `ASGITransport`, sostituita
-  solo la sessione tramite `dependency_overrides`; Redis dei test sul db 15.
-- Marker `integration` e `api` dichiarati con `--strict-markers`.
-
 ## Frontend
 
 Convenzioni in `frontend/CLAUDE.md`. Un cambio di DTO sul backend va
@@ -131,6 +71,24 @@ riportato a mano in `frontend/src/types/api.ts`.
 ## Git e CI
 
 - Branch principale `main`: la CI si attiva sui push a `main` e sulle PR.
+  Remoto GitHub: `origin` (`petrucciandrea/mixology-engine`).
+- **Flusso di lavoro per ogni modifica:**
+  1. Prima di toccare il codice, crea un branch da `main` aggiornato, con
+     prefisso del tipo di commit: `feat/...`, `fix/...`, `refactor/...`,
+     `test/...`, `chore/...`, `docs/...`. Mai lavorare direttamente su `main`.
+  2. A modifica conclusa, un commit (o pochi commit coerenti) sul branch,
+     con messaggio convenzionale in italiano.
+  3. Il merge in `main` avviene **solo con un risultato testato**:
+     `make check-all` verde in locale e CI verde sulla PR. Se i controlli
+     falliscono, si corregge sul branch; non si fa merge "per sistemare dopo".
+  4. Push del branch, PR con `gh pr create` (descrizione in italiano: cosa
+     cambia e perché, come è stato verificato), poi merge con
+     `gh pr merge --merge` (merge commit, per conservare la storia del
+     branch) e aggiornamento di `main` locale.
+  5. **I branch non si eliminano**, né in locale né su `origin`: restano come
+     storia del lavoro. Mai `--delete-branch`, `git branch -d` o
+     `git push origin --delete`.
+  6. Niente `push --force` su `main`, niente `--no-verify`.
 - Commit convenzionali con soggetto in italiano:
   `feat(matching): ...`, `fix(infra): ...`, `refactor(domain): ...`,
   `test: ...`, `chore: ...`, `build: ...`.
