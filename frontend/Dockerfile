@@ -20,10 +20,11 @@ RUN npm ci --no-audit --no-fund
 FROM deps AS build
 
 COPY . .
-# L'URL dell'API viene inlinato nel bundle a build time: le variabili
-# NEXT_PUBLIC_* non esistono piu' a runtime nel browser.
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# L'indirizzo interno del backend, verso cui il server Next inoltra
+# `/api/v1`. Le rewrite si fissano nel manifest a build time: cambiarlo
+# a runtime non avrebbe effetto, va passato come argomento di build.
+ARG BACKEND_INTERNAL_URL=http://backend:8000
+ENV BACKEND_INTERNAL_URL=$BACKEND_INTERNAL_URL
 RUN npm run build
 
 # ------------------------------------------------------------------

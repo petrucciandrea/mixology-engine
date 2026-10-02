@@ -77,9 +77,11 @@ services:
     platform: linux/amd64
     restart: unless-stopped
     environment:
-      # Il browser gira sulla macchina dell'utente, dove l'hostname
-      # `backend` non si risolve: deve puntare alla porta pubblicata.
-      NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-8000}
+      # Il browser chiama l'API sulla stessa origine della pagina e il
+      # server Next la inoltra qui (`rewrites` in next.config.ts): dentro
+      # la rete Docker l'hostname `backend` si risolve, e chi apre lo
+      # studio da un altro dispositivo non deve conoscere l'IP del Mac.
+      BACKEND_INTERNAL_URL: http://backend:8000
       WATCHPACK_POLLING: "true"
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
