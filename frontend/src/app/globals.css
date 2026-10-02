@@ -11,26 +11,46 @@
  * soggetto, non una scelta astratta. I due colori semantici (smeraldo e
  * rosa) sono deliberatamente lontani dall'arancio sulla ruota: "questo valore è
  * in target" e "questo è il pulsante da premere" non devono mai potersi
- * confondere.
+ * confondere. Il celeste è riservato alla temperatura, l'unica grandezza
+ * che si legge "fredda".
  */
 @theme {
   --color-ink: #0b0e0d;
+  --color-recess: #0f1311;
   --color-surface: #131715;
   --color-surface-2: #1a201d;
+  --color-hover: #1f2622;
   --color-line: #253029;
   --color-line-soft: #1d2622;
+  --color-outline: #3a4742;
 
   --color-foreground: #e8ede9;
-  --color-muted: #8a9690;
+  --color-soft: #c9d2cd;
+  --color-title: #b7c1bc;
+  --color-muted: #a9b4ae;
 
   --color-accent: #e8812b;
   --color-accent-strong: #f79a4d;
+  --color-accent-light: #f0a868;
   --color-accent-soft: #2a1a10;
+  --color-accent-line: #6b3d18;
+
+  /* Il solver è l'unico pannello "caldo": è dove si chiede alla macchina
+     di agire, non dove si legge. */
+  --color-solver: #16120e;
+  --color-solver-line: #3a2a1c;
+  --color-solver-field: #0f0c0a;
+
+  --color-drawer: #161b18;
+  --color-drawer-line: #33403a;
+
+  --color-cold: #9fb9c4;
 
   --color-good: #34d399;
   --color-good-soft: #10261f;
   --color-alert: #f87171;
   --color-alert-soft: #2a1717;
+  --color-warn: #f8a1a1;
 
   --font-display: var(--font-spectral), Georgia, serif;
   --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
@@ -58,6 +78,17 @@
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
+
+  /* I target si digitano, non si incrementano: le frecce del browser
+     rubano spazio a cifre che devono restare leggibili. */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
 }
 
 /* La pagina è uno strumento, non un documento: la barra di scorrimento
@@ -76,11 +107,47 @@
   }
 }
 
+/* Le bollicine di uno spritz salgono dal fondo e svaniscono in superficie;
+   la distanza la decide il livello del liquido, via `--rise`. */
+@keyframes mx-rise {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  85% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(var(--rise));
+    opacity: 0;
+  }
+}
+
+/* Avanzamento indeterminato: il solver non dichiara quanto gli manca. */
+@keyframes mx-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* Un'animazione infinita accorciata a 0.01ms diventerebbe uno sfarfallio:
+     le decorazioni in loop si spengono del tutto. */
+  .mx-loop {
+    animation: none !important;
+    opacity: 0 !important;
   }
 }

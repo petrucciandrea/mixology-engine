@@ -266,9 +266,14 @@ export interface ServingProfile {
   consumption_minutes: number;
   initial_temperature_c: number;
   equilibrium_temperature_c: number;
+  /** Temperatura del drink a `consumption_minutes`. */
+  temperature_c: number;
   cooling_melt_water_ml: number;
   ambient_melt_water_ml: number;
   melt_water_ml: number;
+  /** Ghiaccio messo nel bicchiere, e quanto ne resta a `consumption_minutes`. */
+  ice_mass_g: number;
+  remaining_ice_g: number;
   final_volume_ml: number;
   final_mass_g: number;
   total_dilution_factor: number;
@@ -282,6 +287,9 @@ export interface ServingProfile {
 export interface GlassFit {
   capacity_ml: number;
   max_volume_ml: number;
+  /** Spazio occupato dal ghiaccio di servizio; 0 senza ghiaccio. Con
+      `max_volume_ml` fa il volume utile del bicchiere. */
+  ice_volume_ml: number;
   volume_ml: number;
   fill_ratio: number;
   overflows: boolean;
@@ -292,6 +300,9 @@ export interface BalanceResponse {
   profile: BalanceProfile;
   /** `null` per le ricette servite senza ghiaccio. */
   serving_profile: ServingProfile | null;
+  /** Lo stesso profilo campionato al minuto, da `t = 0` (il drink appena
+      servito) a 30 minuti. `null` per le ricette servite senza ghiaccio. */
+  serving_curve: ServingProfile[] | null;
   /** `null` senza bicchiere, o con un bicchiere senza capienza nota. */
   glass_fit: GlassFit | null;
 }
