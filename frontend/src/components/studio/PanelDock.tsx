@@ -88,7 +88,10 @@ export function PanelDock({ open, onOpenChange, counts, renderPanel }: PanelDock
               onClick={() => onOpenChange(isOpen ? null : panel)}
               className={cn(
                 "h-9 flex-1 cursor-pointer rounded-[9px] border border-line px-3 text-[13px] font-medium tracking-[0.02em] transition-colors",
-                "xl:h-auto xl:w-[52px] xl:flex-none xl:rotate-180 xl:px-0 xl:py-3.5 xl:[writing-mode:vertical-rl]",
+                // In scrittura verticale `px-*`/`py-*` (padding-inline/-block)
+                // scambiano asse: il respiro lungo il testo va dato con i
+                // padding fisici, che restano sopra/sotto/ai lati.
+                "xl:h-auto xl:w-[52px] xl:flex-none xl:rotate-180 xl:p-0 xl:pb-4 xl:pt-4 xl:[writing-mode:vertical-rl]",
                 isOpen
                   ? "bg-accent-soft text-accent-strong"
                   : "bg-transparent text-soft hover:bg-surface-2",
