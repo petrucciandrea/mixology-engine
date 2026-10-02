@@ -41,12 +41,12 @@ jobs:
         working-directory: backend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.DEPLOY_SHA }}
 
       - name: Installa uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v10
         with:
           version: "0.5.4"
           enable-cache: true
