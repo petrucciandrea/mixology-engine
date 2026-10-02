@@ -29,6 +29,17 @@ class TestServiceEndpoints:
         assert response.status_code == 200
         assert body == {"status": "ok", "database": "connected", "redis": "connected"}
 
+    async def test_health_without_redis_is_not_degraded(
+        self, client_without_redis: AsyncClient
+    ) -> None:
+        """Redis serve solo alla cache del grafo: se non è configurato il
+        servizio è completo, solo senza un'ottimizzazione. Un 503 qui
+        farebbe ritirare l'istanza all'orchestratore senza motivo."""
+        response = await client_without_redis.get("/health")
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "database": "connected", "redis": "disabled"}
+
     async def test_openapi_schema_is_served(self, client: AsyncClient) -> None:
         response = await client.get("/openapi.json")
         assert response.status_code == 200

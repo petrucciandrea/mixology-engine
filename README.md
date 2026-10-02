@@ -242,6 +242,54 @@ Il pezzo che manca è l'**esplorazione visuale del grafo dei sapori**: gli
 endpoint `/match/graph` e `/match/bridge` sono pronti e non hanno ancora
 una rappresentazione — è il candidato naturale per una vista D3 a rete.
 
+## Pubblicazione
+
+Online gratis, senza scadenza, su tre servizi (ADR-0010):
+
+| Pezzo | Servizio | Note |
+|---|---|---|
+| Studio (Next.js) | Vercel Hobby | inoltra `/api/v1` al backend, niente CORS |
+| API (FastAPI) | Render free, Docker | si sospende dopo 15 minuti senza traffico |
+| PostgreSQL + pgvector | Neon free | endpoint diretto, non `-pooler` |
+
+Redis in produzione non c'è: la cache del grafo è nulla e `/health`
+riporta `"redis": "disabled"`.
+
+Il rilascio del backend lo fa il workflow **Deploy**: quando la CI del
+backend su `main` è verde applica le migrazioni a Neon, lancia il seed e
+solo dopo chiama il deploy hook di Render. Il frontend lo rilascia Vercel
+a ogni push su `main`.
+
+### Prima configurazione
+
+1. **Neon.** Crea un progetto Postgres 16 in `eu-central-1` e copia la
+   stringa di connessione **diretta**. Non serve modificarla: `sslmode` e
+   `channel_binding` li normalizza `Settings`.
+2. **GitHub.** In *Settings → Environments* crea l'environment
+   `production` con il secret `PRODUCTION_DATABASE_URL` (la stringa di
+   Neon). Lancia a mano il workflow **Deploy** (*Actions → Deploy → Run
+   workflow*): crea lo schema e popola la dispensa. L'ultimo passo fallirà
+   perché manca ancora il deploy hook, ed è previsto.
+3. **Render.** *New → Blueprint* su questo repository: legge
+   `render.yaml` e chiede `DATABASE_URL` (la stessa stringa). Dalle
+   impostazioni del servizio copia il *Deploy Hook* nel secret
+   `RENDER_DEPLOY_HOOK_URL` dell'environment `production`.
+4. **Vercel.** Importa il repository con *Root Directory* `frontend` e la
+   variabile `BACKEND_INTERNAL_URL=https://<servizio>.onrender.com`.
+   Serve già in fase di build, perché le rewrite si fissano lì.
+5. **Verifica.** `https://<servizio>.onrender.com/health` deve rispondere
+   `ok`; dall'URL di Vercel lo studio deve bilanciare un Daiquiri.
+
+Per provare in locale l'immagine che va in produzione:
+
+```bash
+docker build -t mixology-backend:prod backend   # stage runtime, il default
+docker run --rm --network mixology-engine_default -p 10000:10000 \
+  -e PORT=10000 -e REDIS_URL= \
+  -e DATABASE_URL=postgresql+asyncpg://mixology:mixology_dev_pw@db:5432/mixology_engine \
+  mixology-backend:prod
+```
+
 ## Comandi
 
 `make help` elenca tutto: migrazioni, seed, lint, type check, shell nei

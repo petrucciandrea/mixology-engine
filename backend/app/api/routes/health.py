@@ -17,29 +17,37 @@ router = APIRouter(tags=["health"])
 
 ComponentStatus = Literal["connected", "unreachable"]
 
+#: Redis può anche essere assente per scelta (ADR-0010): `disabled` non è
+#: un guasto, perché serve solo alla cache del grafo e senza di essa il
+#: servizio risponde comunque, solo ricostruendo il grafo a ogni richiesta.
+OptionalComponentStatus = Literal["connected", "unreachable", "disabled"]
+
 
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     database: ComponentStatus
-    redis: ComponentStatus
+    redis: OptionalComponentStatus
 
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(db: SessionDep, redis: RedisDep, response: Response) -> HealthResponse:
     db_status: ComponentStatus = "connected"
-    redis_status: ComponentStatus = "connected"
+    redis_status: OptionalComponentStatus = "connected"
 
     try:
         await db.execute(text("SELECT 1"))
     except Exception:
         db_status = "unreachable"
 
-    try:
-        await redis.ping()
-    except Exception:
-        redis_status = "unreachable"
+    if redis is None:
+        redis_status = "disabled"
+    else:
+        try:
+            await redis.ping()
+        except Exception:
+            redis_status = "unreachable"
 
-    healthy = db_status == "connected" and redis_status == "connected"
+    healthy = db_status == "connected" and redis_status != "unreachable"
     if not healthy:
         # 503 e non 200: un orchestratore decide se togliere l'istanza dal
         # bilanciatore leggendo lo status code, non il corpo della risposta.

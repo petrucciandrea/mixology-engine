@@ -144,6 +144,50 @@ class TestPairings:
         assert all(item["rationale"] for item in body)
         assert all(item["affinity"] > 0 for item in body)
 
+    async def test_works_without_redis(self, client_without_redis: AsyncClient) -> None:
+        """Senza Redis il grafo si ricostruisce a ogni richiesta, ma il
+        risultato non cambia: la cache è un'ottimizzazione, non una fonte."""
+        rum = await create_ingredient(
+            client_without_redis,
+            name="Rum Bianco",
+            category="SPIRIT",
+            abv=0.40,
+            brix=0.0,
+            acidity=0.0,
+            density_g_ml=0.95,
+            flavor={"alcohol_heat": 0.6, "tropical_fruit": 0.3},
+        )
+        lime = await create_ingredient(
+            client_without_redis,
+            name="Succo di Lime",
+            category="JUICE",
+            abv=0.0,
+            brix=7.5,
+            acidity=6.0,
+            density_g_ml=1.03,
+            flavor={"sour": 0.95, "citrus": 0.9},
+        )
+        syrup = await create_ingredient(
+            client_without_redis,
+            name="Sciroppo 1:1",
+            category="SYRUP",
+            abv=0.0,
+            brix=50.0,
+            acidity=0.0,
+            density_g_ml=1.23,
+            flavor={"sweet": 1.0},
+        )
+        await client_without_redis.post(
+            f"{API}/recipes", json=daiquiri_payload(rum, lime, syrup, (60, 30, 20))
+        )
+
+        response = await client_without_redis.post(
+            f"{API}/match/pairings", json={"ingredient_ids": [rum], "limit": 3}
+        )
+
+        assert response.status_code == 200
+        assert response.json()
+
     async def test_never_suggests_what_is_already_in_the_glass(
         self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
     ) -> None:

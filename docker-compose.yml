@@ -41,6 +41,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # Lo stage di sviluppo: dipendenze dev, uv e compilatori. L'ultimo
+      # stage del Dockerfile e' l'immagine di produzione (ADR-0010).
+      target: dev
     platform: linux/amd64
     restart: unless-stopped
     env_file:

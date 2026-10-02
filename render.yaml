@@ -1,0 +1,37 @@
+# ------------------------------------------------------------------
+# Mixology Engine — Blueprint Render (infrastruttura come codice)
+#
+# Solo il backend vive su Render; il frontend è su Vercel e il database
+# su Neon (ADR-0010). Si crea dal pannello con New → Blueprint.
+# ------------------------------------------------------------------
+services:
+  - type: web
+    name: mixology-engine-api
+    runtime: docker
+    plan: free
+    # La stessa regione del database su Neon (eu-central-1): ogni query
+    # attraversa la rete fra i due servizi, e un oceano in mezzo si paga a
+    # ogni richiesta.
+    region: frankfurt
+    branch: main
+    dockerContext: ./backend
+    # Nessun `--target`: Render non lo supporta, ed è per questo che lo
+    # stage `runtime` è l'ultimo del Dockerfile.
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /health
+    # Il deploy non parte al push: lo avvia il workflow `Deploy` dopo aver
+    # applicato le migrazioni, così il codice nuovo non incontra mai uno
+    # schema vecchio.
+    autoDeployTrigger: "off"
+    envVars:
+      # Stringa di connessione di Neon, incollata così com'è (endpoint
+      # diretto, non `-pooler`): `Settings` la normalizza per asyncpg.
+      - key: DATABASE_URL
+        sync: false
+      # Vuota: niente Redis, cache del grafo nulla.
+      - key: REDIS_URL
+        value: ""
+      - key: ENV
+        value: production
+      - key: DEBUG
+        value: "false"
