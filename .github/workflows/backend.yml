@@ -93,3 +93,33 @@ jobs:
         # Un downgrade che non funziona è una migrazione che non si può
         # ritirare in produzione. Meglio scoprirlo qui.
         run: uv run alembic downgrade base
+
+  image:
+    # Il job `check` verifica il codice; questo verifica l'immagine che
+    # viene davvero rilasciata (stage `runtime`, ADR-0010): che si
+    # costruisca senza compilatori né dipendenze dev, e che parta come la
+    # avvia la piattaforma — porta da `$PORT`, Redis assente, URL del
+    # database nel formato libpq dei provider gestiti.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build dell'immagine di produzione
+        run: docker build --target runtime -t mixology-backend:ci backend
+
+      - name: Avvio come in produzione
+        # `/` non tocca il database: qui conta che l'app si avvii e che la
+        # configurazione venga accettata, non che un Postgres risponda.
+        run: |
+          docker run -d --name backend -p 8000:10000 \
+            -e PORT=10000 \
+            -e REDIS_URL= \
+            -e 'DATABASE_URL=postgresql://ci:ci@127.0.0.1:5432/ci?sslmode=require&channel_binding=require' \
+            mixology-backend:ci
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/; then exit 0; fi
+            sleep 1
+          done
+          docker logs backend
+          exit 1
