@@ -212,7 +212,7 @@ class _ServingModel:
             / balance.total_volume_ml,
             abv=balance.pure_alcohol_ml / final_volume,
             brix=balance.sugar_mass_g / final_mass * 100.0,
-            acidity=balance.acid_mass_g / final_mass * 100.0,
+            acidity=balance.acid_mass_g / final_volume * 100.0,
         )
 
 

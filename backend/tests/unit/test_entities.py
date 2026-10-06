@@ -134,10 +134,10 @@ class TestRecipe:
 
 class TestRecipeFamily:
     def test_the_family_is_optional(self, daiquiri: Recipe) -> None:
-        assert daiquiri.family is None
+        assert replace(daiquiri, family=None).family is None
 
     def test_a_recipe_carries_its_family(self, daiquiri: Recipe) -> None:
-        assert replace(daiquiri, family=RecipeFamily.SOUR).family is RecipeFamily.SOUR
+        assert replace(daiquiri, family=RecipeFamily.TROPICAL).family is RecipeFamily.TROPICAL
 
     def test_with_volumes_preserves_the_family(self, daiquiri: Recipe) -> None:
         sour = replace(daiquiri, family=RecipeFamily.SOUR)

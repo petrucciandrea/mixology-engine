@@ -38,16 +38,21 @@ class TestConvergence:
         self, solver: BalancingSolver, unbalanced_daiquiri: Recipe
     ) -> None:
         before = calculate_balance(unbalanced_daiquiri)
-        target = TargetProfile(abv=0.16, brix=10.0, acidity=1.0)
+        # Tre target **compatibili fra loro**: sono i valori di un Daiquiri
+        # 60/25/20 (15.0 %, 7.85 °Bx, 0.94 % p/v). Con tre ingredienti e il
+        # volume libero i target non sono indipendenti: 16 % / 10 °Bx / 1.0 %
+        # non descrivono nessuna ricetta di rum, lime e sciroppo, e il solver
+        # (giustamente) non li raggiunge tutti.
+        target = TargetProfile(abv=0.15, brix=8.0, acidity=0.95)
 
         result = solver.solve(unbalanced_daiquiri, target)
         after = result.profile
 
         assert result.status is SolverStatus.CONVERGED
         # Ogni target migliora rispetto al punto di partenza...
-        assert abs(after.abv_post - 0.16) < abs(before.abv_post - 0.16)
-        assert abs(after.brix_post - 10.0) < abs(before.brix_post - 10.0)
-        assert abs(after.acidity_post - 1.0) < abs(before.acidity_post - 1.0)
+        assert abs(after.abv_post - 0.15) < abs(before.abv_post - 0.15)
+        assert abs(after.brix_post - 8.0) < abs(before.brix_post - 8.0)
+        assert abs(after.acidity_post - 0.95) < abs(before.acidity_post - 0.95)
         # ...e l'errore residuo è entro la tolleranza di un bar, non solo
         # "minore di prima".
         assert result.max_relative_error is not None
@@ -191,8 +196,8 @@ class TestSugarAcidRatioTarget:
         costante 1e6: un plateau su cui le differenze finite di SLSQP
         misurano gradiente zero, quindi il solver non sapeva in che
         direzione muoversi e restava fermo. La riformulazione lineare
-        (Brix − r·Acidità) è derivabile anche lì, e spinge ad aggiungere
-        acido.
+        (zuccheri − r·acidi, in grammi) è derivabile anche lì, e spinge ad
+        aggiungere acido.
         """
         recipe = Recipe(
             id="no-acid",
@@ -208,13 +213,17 @@ class TestSugarAcidRatioTarget:
             ),
         )
         before = calculate_balance(recipe)
-        assert before.sugar_acid_ratio is not None
-        assert before.sugar_acid_ratio > 20.0, "il punto di partenza è molto sbilanciato"
+        # 5 ml di lime = 0.3 g di acido su 95 ml: 0.32 % p/v, sotto la soglia
+        # percepibile, quindi il rapporto del profilo non esiste. Il punto di
+        # partenza si misura sulle masse: 18.5 g di zuccheri / 0.3 g ≈ 62.
+        assert before.sugar_acid_ratio is None
+        assert (
+            before.sugar_mass_g / before.acid_mass_g > 20.0
+        ), "il punto di partenza è molto sbilanciato"
 
         result = solver.solve(recipe, TargetProfile(sugar_acid_ratio=6.0))
 
         assert result.profile.sugar_acid_ratio is not None
-        assert result.profile.sugar_acid_ratio < before.sugar_acid_ratio
         assert result.profile.sugar_acid_ratio == pytest.approx(6.0, abs=0.3)
 
 

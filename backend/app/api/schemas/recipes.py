@@ -8,7 +8,14 @@ from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.use_cases.balancing import BalanceResult
-from app.domain.balance import BalanceProfile, ServingProfile
+from app.domain.balance import (
+    SOUR_RATIO_LOWER_BOUND,
+    SOUR_RATIO_UPPER_BOUND,
+    BalanceProfile,
+    ServingProfile,
+    SourBalance,
+    assess_sour_balance,
+)
 from app.domain.entities import Recipe
 from app.domain.enums import DilutionMethod, GlassType, RecipeFamily, ServingIce
 from app.domain.services.glassware import GlassFit
@@ -119,10 +126,16 @@ class BalanceProfileOut(BaseModel):
     acidity_post: float
 
     abv_post_percent: float
-    is_balanced_sour: bool
+    #: Giudizio dolce/equilibrato/aspro: solo per i sour con acidità
+    #: percepibile, `null` altrove (vedi `assess_sour_balance`).
+    sour_balance: SourBalance | None
+    #: Estremi della finestra, perché l'interfaccia disegni la barra senza
+    #: riscriverli: la soglia vive nel dominio e in un posto solo.
+    sour_ratio_lower_bound: float = SOUR_RATIO_LOWER_BOUND
+    sour_ratio_upper_bound: float = SOUR_RATIO_UPPER_BOUND
 
     @classmethod
-    def from_entity(cls, profile: BalanceProfile) -> BalanceProfileOut:
+    def from_entity(cls, profile: BalanceProfile, family: RecipeFamily | None) -> BalanceProfileOut:
         return cls(
             total_volume_ml=profile.total_volume_ml,
             pure_alcohol_ml=profile.pure_alcohol_ml,
@@ -141,7 +154,7 @@ class BalanceProfileOut(BaseModel):
             brix_post=profile.brix_post,
             acidity_post=profile.acidity_post,
             abv_post_percent=profile.abv_post_percent,
-            is_balanced_sour=profile.is_balanced_sour,
+            sour_balance=assess_sour_balance(family, profile),
         )
 
 
@@ -228,7 +241,7 @@ class BalanceOut(BaseModel):
     def from_result(cls, result: BalanceResult) -> BalanceOut:
         return cls(
             recipe=RecipeOut.from_entity(result.recipe),
-            profile=BalanceProfileOut.from_entity(result.profile),
+            profile=BalanceProfileOut.from_entity(result.profile, result.recipe.family),
             serving_profile=(
                 ServingProfileOut.from_entity(result.serving)
                 if result.serving is not None

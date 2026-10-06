@@ -12,10 +12,12 @@ codice: se una di esse cade, il modello è sbagliato, non il test.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
+from app.domain.balance import SUGAR_ACID_MIN_ACIDITY
 from app.domain.entities import (
     MAX_ACIDITY_PERCENT,
     MAX_BRIX,
@@ -152,11 +154,12 @@ def test_solute_mass_is_conserved_under_dilution(recipe: Recipe) -> None:
 
     La massa dei soluti calcolata dalle concentrazioni post-diluizione
     deve coincidere con quella pre-diluizione: è la conservazione della
-    massa applicata al modello.
+    massa applicata al modello. Gli zuccheri si ricostruiscono sulla massa
+    finale (Brix è % peso), gli acidi sul volume finale (acidità è % p/v).
     """
     profile = calculate_balance(recipe)
     sugar_after = profile.brix_post / 100.0 * profile.final_mass_g
-    acid_after = profile.acidity_post / 100.0 * profile.final_mass_g
+    acid_after = profile.acidity_post / 100.0 * profile.final_volume_ml
 
     assert sugar_after == pytest_approx(profile.sugar_mass_g)
     assert acid_after == pytest_approx(profile.acid_mass_g)
@@ -196,13 +199,31 @@ def test_scaling_all_volumes_preserves_every_intensive_quantity(
 
 @given(recipe=recipes())
 @settings(max_examples=200)
-def test_sugar_acid_ratio_is_invariant_under_dilution(recipe: Recipe) -> None:
-    """Acqua e zuccheri scalano insieme: il rapporto non si muove."""
+def test_sugar_acid_ratio_is_the_mass_ratio_and_ignores_dilution(recipe: Recipe) -> None:
+    """Il rapporto sono grammi su grammi: l'acqua e la tecnica non lo muovono.
+
+    Si confronta la stessa dose preparata in due modi: la diluizione cambia
+    (shaken/stirred aggiungono acqua, built no), il rapporto no.
+    """
     profile = calculate_balance(recipe)
     assume(profile.sugar_acid_ratio is not None)
-    assume(profile.acidity_post > 1e-9)
 
-    assert profile.brix_post / profile.acidity_post == pytest_approx(profile.sugar_acid_ratio)
+    assert profile.sugar_acid_ratio == pytest_approx(profile.sugar_mass_g / profile.acid_mass_g)
+
+    built = calculate_balance(replace(recipe, dilution_method=DilutionMethod.BUILT))
+    assert built.sugar_acid_ratio == pytest_approx(profile.sugar_acid_ratio)
+
+
+@given(recipe=recipes())
+@settings(max_examples=200)
+def test_sugar_acid_ratio_exists_only_with_perceptible_acidity(recipe: Recipe) -> None:
+    """Sotto la soglia di acidità percepibile il rapporto non esiste, sopra sì."""
+    profile = calculate_balance(recipe)
+
+    if profile.acidity_pre < SUGAR_ACID_MIN_ACIDITY:
+        assert profile.sugar_acid_ratio is None
+    else:
+        assert profile.sugar_acid_ratio is not None
 
 
 def pytest_approx(expected: float | None) -> object:

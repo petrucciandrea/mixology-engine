@@ -198,7 +198,39 @@ class TestBalanceApi:
 
         assert profile["pure_alcohol_ml"] == pytest.approx(24.0)
         assert profile["total_mass_g"] == pytest.approx(112.5)
-        assert profile["sugar_acid_ratio"] == pytest.approx(7.884, abs=1e-3)
+        # 12.8253 g di zuccheri / 1.8 g di acidi
+        assert profile["sugar_acid_ratio"] == pytest.approx(12.8253 / 1.8, abs=1e-3)
+        # Acidità p/v: 1.8 g su 110 ml prima dell'acqua di fusione.
+        assert profile["acidity_pre"] == pytest.approx(1.8 / 110.0 * 100, abs=1e-6)
+
+    async def test_sour_balance_is_null_without_a_family(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        """Gli stessi numeri di un sour, ma senza famiglia: nessun giudizio."""
+        response = await client.post(
+            f"{API}/balance", json=daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20))
+        )
+
+        assert response.json()["profile"]["sour_balance"] is None
+
+    @pytest.mark.parametrize(
+        ("volumes", "expected"),
+        [((60, 30, 20), "BALANCED"), ((50, 15, 35), "TOO_SWEET"), ((60, 45, 5), "TOO_TART")],
+    )
+    async def test_a_sour_gets_a_verdict_on_its_sugar_acid_ratio(
+        self,
+        client: AsyncClient,
+        rum_id: str,
+        lime_id: str,
+        syrup_id: str,
+        volumes: tuple[float, float, float],
+        expected: str,
+    ) -> None:
+        payload = {**daiquiri_payload(rum_id, lime_id, syrup_id, volumes), "family": "SOUR"}
+
+        response = await client.post(f"{API}/balance", json=payload)
+
+        assert response.json()["profile"]["sour_balance"] == expected
 
     async def test_balance_includes_the_serving_profile_only_with_ice(
         self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
@@ -306,7 +338,8 @@ class TestOptimizeApi:
             f"{API}/optimize",
             json={
                 "recipe": daiquiri_payload(rum_id, lime_id, syrup_id, (50, 15, 35)),
-                "target": {"abv": 0.16, "brix": 10.0, "acidity": 1.0},
+                # Target compatibili fra loro: i valori di un Daiquiri 60/25/20.
+                "target": {"abv": 0.15, "brix": 8.0, "acidity": 0.95},
             },
         )
         body = response.json()

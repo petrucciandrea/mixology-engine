@@ -1,7 +1,8 @@
 """Ingredienti di riferimento per i test di dominio.
 
 Sono valori realistici e verificabili, non numeri di comodo: il rum a
-40% vol e densità 0.95, il lime a 6% di acido citrico e 7.5 °Bx, lo
+40% vol e densità 0.95, il lime a 6% di acido citrico e 1.7 °Bx di soli
+zuccheri (non il Brix rifrattometrico, che conta anche l'acido), lo
 sciroppo 1:1 a 50 °Bx. Usare dati veri significa che un test che fallisce
 segnala un errore nel modello, non nella fixture.
 """
@@ -11,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from app.domain.entities import Ingredient, PhysicalProfile, Recipe, RecipeIngredient
-from app.domain.enums import DilutionMethod, IngredientCategory, ServingIce
+from app.domain.enums import DilutionMethod, IngredientCategory, RecipeFamily, ServingIce
 from app.domain.flavor import FlavorProfile
 
 
@@ -60,7 +61,7 @@ def lime_juice() -> Ingredient:
         "Succo di Lime",
         IngredientCategory.JUICE,
         abv=0.0,
-        brix=7.5,
+        brix=1.7,
         acidity=6.0,
         density_g_ml=1.03,
         flavor=FlavorProfile.from_descriptors(sour=0.95, citrus=0.9, herbaceous=0.2),
@@ -114,6 +115,20 @@ def sweet_vermouth() -> Ingredient:
 
 
 @pytest.fixture
+def tonic_water() -> Ingredient:
+    return make_ingredient(
+        "tonic",
+        "Acqua Tonica",
+        IngredientCategory.MIXER,
+        abv=0.0,
+        brix=8.5,
+        acidity=0.1,
+        density_g_ml=1.03,
+        flavor=FlavorProfile.from_descriptors(sweet=0.5, bitter=0.45, medicinal=0.5),
+    )
+
+
+@pytest.fixture
 def campari() -> Ingredient:
     return make_ingredient(
         "campari",
@@ -137,6 +152,7 @@ def daiquiri(white_rum: Ingredient, lime_juice: Ingredient, simple_syrup: Ingred
         name="Classic Daiquiri",
         dilution_method=DilutionMethod.SHAKEN,
         serving_ice=ServingIce.NONE,
+        family=RecipeFamily.SOUR,
         ingredients=(
             RecipeIngredient(ingredient=white_rum, volume_ml=60.0),
             RecipeIngredient(ingredient=lime_juice, volume_ml=30.0),
@@ -171,9 +187,26 @@ def unbalanced_daiquiri(
         name="Unbalanced Daiquiri",
         dilution_method=DilutionMethod.SHAKEN,
         serving_ice=ServingIce.NONE,
+        family=RecipeFamily.SOUR,
         ingredients=(
             RecipeIngredient(ingredient=white_rum, volume_ml=50.0),
             RecipeIngredient(ingredient=lime_juice, volume_ml=15.0),
             RecipeIngredient(ingredient=simple_syrup, volume_ml=35.0),
+        ),
+    )
+
+
+@pytest.fixture
+def gin_tonic(gin: Ingredient, tonic_water: Ingredient) -> Recipe:
+    """Gin Tonic 50/150, costruito: zuccheri della tonica, acidi appena in tracce."""
+    return Recipe(
+        id="gin-tonic",
+        name="Gin Tonic",
+        dilution_method=DilutionMethod.BUILT,
+        serving_ice=ServingIce.CUBES,
+        family=RecipeFamily.HIGHBALL,
+        ingredients=(
+            RecipeIngredient(ingredient=gin, volume_ml=50.0),
+            RecipeIngredient(ingredient=tonic_water, volume_ml=150.0),
         ),
     )

@@ -174,7 +174,7 @@ class SolverResultOut(BaseModel):
         return cls(
             status=result.status,
             recipe=RecipeOut.from_entity(result.recipe),
-            profile=BalanceProfileOut.from_entity(result.profile),
+            profile=BalanceProfileOut.from_entity(result.profile, result.recipe.family),
             objective_value=result.objective_value,
             iterations=result.iterations,
             residuals=[TargetResidualOut.from_entity(item) for item in result.residuals],

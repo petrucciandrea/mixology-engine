@@ -12,15 +12,20 @@ import {
   type BalanceProfile,
   type GlassFit,
   type SolverResult,
+  type SourBalance,
 } from "@/types/api";
 
-/** Finestra di riferimento del rapporto zuccheri/acidi per un sour
-    equilibrato, su una scala da 0 a 14. Stessi valori del dominio; qui
-    servono solo a disegnare la barra, la valutazione arriva dal backend
-    (`is_balanced_sour`). */
-const SOUR_MIN = 5.5;
-const SOUR_MAX = 7.0;
-const RATIO_SCALE_MAX = 14;
+/** Fondo scala della barra zuccheri/acidi. La finestra dei sour (gli estremi
+    arrivano dal backend nel profilo) e il giudizio (`sour_balance`) non si
+    calcolano qui: la barra li disegna soltanto. */
+const RATIO_SCALE_MAX = 20;
+
+/** Il giudizio, nel linguaggio del bar. */
+const SOUR_BALANCE_LABELS: Record<SourBalance, string> = {
+  TOO_TART: "aspro",
+  BALANCED: "in finestra",
+  TOO_SWEET: "dolce",
+};
 
 /** Sotto questo scarto relativo un target si considera raggiunto: è
     l'ordine dell'errore che introduce da solo l'arrotondamento dei volumi
@@ -47,6 +52,7 @@ export function CommandStrip({ profile, glassFit, isCalculating, solver }: Comma
     transition: "box-shadow .35s",
   };
   const ratio = profile?.sugar_acid_ratio ?? null;
+  const sourBalance = profile?.sour_balance ?? null;
   const totalPre = profile?.total_volume_ml ?? 0;
 
   return (
@@ -82,22 +88,26 @@ export function CommandStrip({ profile, glassFit, isCalculating, solver }: Comma
           style={flash}
           dimmed={isCalculating}
           badge={
-            ratio === null ? null : (
-              <Badge tone={profile?.is_balanced_sour ? "good" : "alert"}>
-                {profile?.is_balanced_sour ? "in finestra" : ratio > SOUR_MAX ? "dolce" : "aspro"}
+            sourBalance === null ? null : (
+              <Badge tone={sourBalance === "BALANCED" ? "good" : "alert"}>
+                {SOUR_BALANCE_LABELS[sourBalance]}
               </Badge>
             )
           }
         >
           <Figure>{ratio === null ? "—" : ratio.toFixed(1)}</Figure>
           <div className="relative mt-3 h-1.5 rounded-full bg-surface-2" aria-hidden>
-            <div
-              className="absolute inset-y-0 rounded-full bg-good/35"
-              style={{
-                left: `${(SOUR_MIN / RATIO_SCALE_MAX) * 100}%`,
-                width: `${((SOUR_MAX - SOUR_MIN) / RATIO_SCALE_MAX) * 100}%`,
-              }}
-            />
+            {/* La finestra descrive l'equilibrio di un sour: sugli altri drink
+                resta solo il segnaposto, senza una fascia che inviti a giudicare. */}
+            {profile !== null && sourBalance !== null && (
+              <div
+                className="absolute inset-y-0 rounded-full bg-good/35"
+                style={{
+                  left: `${(profile.sour_ratio_lower_bound / RATIO_SCALE_MAX) * 100}%`,
+                  width: `${((profile.sour_ratio_upper_bound - profile.sour_ratio_lower_bound) / RATIO_SCALE_MAX) * 100}%`,
+                }}
+              />
+            )}
             {ratio !== null && (
               <div
                 className="absolute -top-1 -ml-[1.5px] h-3.5 w-[3px] rounded-sm bg-foreground transition-[left] duration-200"
@@ -105,8 +115,11 @@ export function CommandStrip({ profile, glassFit, isCalculating, solver }: Comma
               />
             )}
           </div>
-          {ratio === null && profile !== null && (
-            <Footnote>senza acidi il rapporto non esiste</Footnote>
+          {profile !== null && ratio === null && (
+            <Footnote>acidi troppo bassi per un rapporto</Footnote>
+          )}
+          {profile !== null && ratio !== null && sourBalance === null && (
+            <Footnote>il giudizio vale solo per i sour</Footnote>
           )}
         </Readout>
 

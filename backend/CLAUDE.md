@@ -44,11 +44,14 @@ Vincoli da rispettare:
 
 ## Fisica e solver
 
-Fisica (formule in `../docs/DOMAIN_MODEL_AND_MATH.md`): **ABV e densità
-lavorano sui volumi, Brix e acidità sulle masse** (volume × densità). ABV è
-una frazione in [0, 1], Brix in % peso, acidità in % p/v in [0, 10]. Sempre
-distinguere pre- e post-diluizione nei nomi. Niente formule approssimate o
-mock della fisica: si implementa il modello reale.
+Fisica (formule in `../docs/DOMAIN_MODEL_AND_MATH.md`): **ABV e acidità
+lavorano sui volumi, il Brix sulle masse** (volume × densità). ABV è una
+frazione in [0, 1], Brix in % peso di *zucchero* (non la lettura del
+rifrattometro), acidità in % p/v in [0, 10], senza densità. Il rapporto
+zuccheri/acidi è un quoziente di masse, assente sotto 0.5 % p/v di acidità, e
+il giudizio dolce/aspro vale solo per i sour (ADR-0011). Sempre distinguere
+pre- e post-diluizione nei nomi. Niente formule approssimate o mock della
+fisica: si implementa il modello reale.
 
 Il solver restituisce sempre stato di convergenza, iterazioni e residui; è
 deterministico (multi-start a seed fisso); arrotonda i volumi al passo del

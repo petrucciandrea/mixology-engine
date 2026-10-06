@@ -17,3 +17,4 @@ dichiara quale sostituisce.
 | [0008](0008-ghiaccio-di-servizio.md) | Il ghiaccio di servizio è un attributo della ricetta, separato dalla tecnica | Accettata |
 | [0009](0009-bicchiere-di-servizio-e-capienza.md) | Il bicchiere è un attributo facoltativo della ricetta e ne limita il volume | Accettata |
 | [0010](0010-pubblicazione-su-piani-gratuiti.md) | Pubblicazione su piani gratuiti: Vercel, Render, Neon, senza Redis | Accettata |
+| [0011](0011-rapporto-zuccheri-acidi-e-acidita-per-volume.md) | Rapporto zuccheri/acidi da masse, giudizio solo per i sour, acidità per volume | Accettata |

@@ -158,7 +158,7 @@ async def lime_id(client: AsyncClient) -> str:
         name="Succo di Lime",
         category="JUICE",
         abv=0.0,
-        brix=7.5,
+        brix=1.7,
         acidity=6.0,
         density_g_ml=1.03,
         flavor={"sour": 0.95, "citrus": 0.9},

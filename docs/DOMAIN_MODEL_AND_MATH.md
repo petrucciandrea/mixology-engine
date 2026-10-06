@@ -4,8 +4,8 @@
 Ogni ingrediente ha i seguenti parametri:
 - `volume_ml`: Volume in millilitri (float)
 - `abv`: Titolo alcolometrico volumetrico in frazione [0.0 - 1.0]
-- `brix`: Concentrazione zuccherina in gradi Brix [% peso] [0.0 - 100.0]
-- `acidity`: Percentuale peso/volume di acido equivalente (citrico/malico/tartarico) [0.0 - 10.0]
+- `brix`: Massa di **zucchero** ogni 100 g, in gradi Brix [% peso] [0.0 - 100.0]. Non è la lettura del rifrattometro, che conta anche gli acidi (lime: 7.5 letto, 1.7 di zucchero). ADR-0011
+- `acidity`: Percentuale peso/volume di acido equivalente (citrico/malico/tartarico), cioè g ogni 100 ml [0.0 - 10.0]
 - `density_g_ml`: Densità in g/ml (es. alcol ~0.94, sciroppo 1:1 ~1.23, acqua ~1.00)
 
 ## 2. Formule di Bilanciamento Pre-Diluizione
@@ -15,9 +15,10 @@ Ogni ingrediente ha i seguenti parametri:
 - **Massa Totale Liquidi (g):** $M_{tot} = \sum (V_i \cdot \text{density}_i)$
 - **Zuccheri Totali (g):** $M_{sugar} = \sum (V_i \cdot \text{density}_i \cdot \frac{Brix_i}{100})$
 - **Brix Pre-Diluizione (°Bx):** $Brix_{pre} = \left(\frac{M_{sugar}}{M_{tot}}\right) \cdot 100$
-- **Massa Acidi (g):** $M_{acid} = \sum (V_i \cdot \text{density}_i \cdot \frac{\text{acidity}_i}{100})$
-- **Acidità Pre-Diluizione (%):** $\text{Acidity}_{pre} = \left(\frac{M_{acid}}{M_{tot}}\right) \cdot 100$
-- **Sugar-to-Acid Ratio:** $\text{Ratio} = \frac{Brix_{pre}}{\text{Acidity}_{pre}}$ (Target Sour standard: 5.5 - 7.0)
+- **Massa Acidi (g):** $M_{acid} = \sum (V_i \cdot \frac{\text{acidity}_i}{100})$ (senza densità: l'acidità è già per volume)
+- **Acidità Pre-Diluizione (% p/v):** $\text{Acidity}_{pre} = \left(\frac{M_{acid}}{V_{tot}}\right) \cdot 100$
+- **Sugar-to-Acid Ratio:** $\text{Ratio} = \frac{M_{sugar}}{M_{acid}}$ (g di zucchero per g di acido), definito solo se $\text{Acidity}_{pre} \ge 0.5$ % p/v, altrimenti assente. Non dipende dalla diluizione.
+- **Giudizio sui sour:** solo per `RecipeFamily.SOUR`. Equilibrato se $3.5 \le \text{Ratio} \le 12.0$, aspro sotto, dolce sopra. Finestra tarata sui classici del seed (ADR-0011).
 
 ## 3. Modello di Diluizione Termodinamica (Dave Arnold)
 - **Fattore Diluizione Shakerata:** 
@@ -28,7 +29,7 @@ Ogni ingrediente ha i seguenti parametri:
 - **Volume Finale:** $V_{final} = V_{tot} + V_{h2o}$
 - **ABV Finale Effettivo:** $ABV_{post} = \frac{V_{alc}}{V_{final}}$
 - **Brix Post-Diluizione:** $Brix_{post} = \left(\frac{M_{sugar}}{M_{tot} + V_{h2o}}\right) \cdot 100$
-- **Acidità Post-Diluizione:** $\text{Acidity}_{post} = \left(\frac{M_{acid}}{M_{tot} + V_{h2o}}\right) \cdot 100$
+- **Acidità Post-Diluizione (% p/v):** $\text{Acidity}_{post} = \left(\frac{M_{acid}}{V_{final}}\right) \cdot 100$
 
 ## 4. Diluizione da ghiaccio di servizio (bilancio termico)
 Vale solo per le ricette con `serving_ice ≠ NONE` ed è un profilo **separato** (`ServingProfile`), calcolato dopo $t$ minuti di consumo (default 10, massimo 60). Le curve di Arnold non lo coprono: è un bilancio di calore, con ipotesi dichiarate in `domain/services/serving_dilution.py`.
