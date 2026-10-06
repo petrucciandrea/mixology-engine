@@ -10,12 +10,42 @@ possono ancorare ogni passaggio invece del solo numero finale.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
-#: Intervallo di riferimento del rapporto zuccheri/acidi per un sour
-#: equilibrato (Brix/Acidity). Sotto è percepito aspro, sopra stucchevole.
-#: Valori dal domain model; sono una guida di degustazione, non un vincolo.
-SOUR_RATIO_LOWER_BOUND = 5.5
-SOUR_RATIO_UPPER_BOUND = 7.0
+from .enums import RecipeFamily
+
+#: Acidità minima (% p/v, pre-diluizione) perché il rapporto zuccheri/acidi
+#: abbia senso. Sotto, l'acido è una traccia — il 0.1 % della tonica, lo 0.3 %
+#: di vermouth e Campari — e il drink non ha un carattere acido da
+#: bilanciare: dividere gli zuccheri per quella traccia dà numeri come 44 o
+#: 85, matematicamente esatti e privi di significato. Un sour vero sta oltre
+#: l'1 % (i classici del seed vanno da 1.1 a 1.9). La soglia è volutamente
+#: più bassa, 0.5 %: esclude le tracce senza togliere il rapporto a un sour
+#: leggero o a un highball agrumato, e senza farlo sparire a un solver che
+#: sta cercando di aggiungere acido. Come ogni soglia sensoriale è una
+#: taratura, non una costante fisica.
+SUGAR_ACID_MIN_ACIDITY = 0.5
+
+#: Finestra del rapporto zuccheri/acidi (grammi di zucchero per grammo di
+#: acido) entro cui un **sour** è equilibrato. Sotto è aspro, sopra dolce.
+#:
+#: È tarata sui classici del seed (`tests/unit/test_sour_balance.py`): sui
+#: 20 sour giudicabili il rapporto va da 3.8 (Margarita) a 10.7 (Penicillin),
+#: e la finestra li contiene tutti tranne l'Amaretto Sour (16.2), dolce per
+#: costruzione perché poggia su un liquore a 40 °Bx. La vecchia finestra
+#: 5.5–7.0 era più stretta del campo dei sour tradizionali — un Whiskey Sour
+#: vale 9.4, un Last Word 10.0 — e li marcava dolci. Il Gimlet resta fuori
+#: dal giudizio perché il cordial al lime porta troppo poco acido.
+SOUR_RATIO_LOWER_BOUND = 3.5
+SOUR_RATIO_UPPER_BOUND = 12.0
+
+
+class SourBalance(str, Enum):
+    """Giudizio sul rapporto zuccheri/acidi di un sour."""
+
+    TOO_TART = "TOO_TART"
+    BALANCED = "BALANCED"
+    TOO_SWEET = "TOO_SWEET"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,9 +60,12 @@ class BalanceProfile:
     acid_mass_g: float
 
     # --- Grandezze intensive pre-diluizione ---
+    # Brix in % peso, acidità in % p/v (g di acido ogni 100 ml di drink).
     abv_pre: float
     brix_pre: float
     acidity_pre: float
+    #: Grammi di zucchero per grammo di acido; `None` se l'acidità è sotto
+    #: `SUGAR_ACID_MIN_ACIDITY`. Non dipende dalla diluizione.
     sugar_acid_ratio: float | None
 
     # --- Diluizione ---
@@ -51,18 +84,26 @@ class BalanceProfile:
         """ABV finale in punti percentuali, come si legge su un'etichetta."""
         return self.abv_post * 100.0
 
-    @property
-    def is_balanced_sour(self) -> bool:
-        """True se il rapporto zuccheri/acidi cade nella finestra dei sour.
 
-        Il rapporto è calcolato pre-diluizione perché l'acqua abbassa Brix
-        e acidità nella stessa proporzione: il rapporto è invariante sotto
-        diluizione, ed è proprio questo a renderlo l'indicatore stabile
-        dell'equilibrio di una ricetta.
-        """
-        if self.sugar_acid_ratio is None:
-            return False
-        return SOUR_RATIO_LOWER_BOUND <= self.sugar_acid_ratio <= SOUR_RATIO_UPPER_BOUND
+def assess_sour_balance(family: RecipeFamily | None, profile: BalanceProfile) -> SourBalance | None:
+    """Il giudizio sul rapporto zuccheri/acidi, solo per i sour.
+
+    `None` quando non si può o non si deve giudicare: la ricetta non è un
+    sour (la finestra descrive il loro equilibrio, non quello di uno
+    Spritz o di uno Screwdriver) oppure il rapporto non esiste perché gli
+    acidi sono in tracce. `None` e non `BALANCED`: "non applicabile" non è
+    un'approvazione.
+
+    Il rapporto è un quoziente di masse, quindi non dipende dalla
+    diluizione: lo stesso giudizio vale prima e dopo il ghiaccio.
+    """
+    if family is not RecipeFamily.SOUR or profile.sugar_acid_ratio is None:
+        return None
+    if profile.sugar_acid_ratio < SOUR_RATIO_LOWER_BOUND:
+        return SourBalance.TOO_TART
+    if profile.sugar_acid_ratio > SOUR_RATIO_UPPER_BOUND:
+        return SourBalance.TOO_SWEET
+    return SourBalance.BALANCED
 
 
 @dataclass(frozen=True, slots=True)

@@ -254,8 +254,16 @@ export interface BalanceProfile {
   acidity_post: number;
 
   abv_post_percent: number;
-  is_balanced_sour: boolean;
+  /** Giudizio sul rapporto zuccheri/acidi: solo per i sour con acidità
+      percepibile, `null` per ogni altro drink (la finestra non lo descrive). */
+  sour_balance: SourBalance | null;
+  /** Estremi della finestra dei sour, dal dominio: servono a disegnare la
+      barra, non a giudicare. */
+  sour_ratio_lower_bound: number;
+  sour_ratio_upper_bound: number;
 }
+
+export type SourBalance = "TOO_TART" | "BALANCED" | "TOO_SWEET";
 
 /**
  * Il drink dopo la diluizione dovuta al ghiaccio nel bicchiere, a

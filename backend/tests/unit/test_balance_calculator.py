@@ -7,9 +7,11 @@ l'output conferma solo che il codice non è cambiato, non che è corretto.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
-from app.domain.balance import SOUR_RATIO_LOWER_BOUND, SOUR_RATIO_UPPER_BOUND
+from app.domain.balance import SUGAR_ACID_MIN_ACIDITY
 from app.domain.entities import Ingredient, Recipe, RecipeIngredient
 from app.domain.enums import DilutionMethod, ServingIce
 from app.domain.services import dilution
@@ -58,17 +60,37 @@ class TestDaiquiri:
         assert profile.pure_alcohol_ml == pytest.approx(24.0)
         # 60·0.95 + 30·1.03 + 20·1.23 = 57 + 30.9 + 24.6
         assert profile.total_mass_g == pytest.approx(112.5)
-        # 30·1.03·0.075 + 20·1.23·0.50 = 2.3175 + 12.3
-        assert profile.sugar_mass_g == pytest.approx(14.6175, abs=1e-4)
-        # 30·1.03·0.06
-        assert profile.acid_mass_g == pytest.approx(1.854, abs=1e-4)
+        # 30·1.03·0.017 + 20·1.23·0.50 = 0.5253 + 12.3
+        assert profile.sugar_mass_g == pytest.approx(12.8253, abs=1e-4)
+        # L'acidità è % p/v: 6 g ogni 100 ml di lime, quindi 30·0.06 = 1.8 g.
+        # La densità non entra: il dato è già per volume.
+        assert profile.acid_mass_g == pytest.approx(1.8, abs=1e-9)
 
     def test_intensive_quantities_before_dilution(self, daiquiri: Recipe) -> None:
         profile = calculate_balance(daiquiri)
 
         assert profile.abv_pre == pytest.approx(24.0 / 110.0, abs=1e-6)
-        assert profile.brix_pre == pytest.approx(14.6175 / 112.5 * 100, abs=1e-4)
-        assert profile.acidity_pre == pytest.approx(1.854 / 112.5 * 100, abs=1e-4)
+        # Il Brix è % peso: zuccheri / massa.
+        assert profile.brix_pre == pytest.approx(12.8253 / 112.5 * 100, abs=1e-4)
+        # L'acidità è % p/v: acidi / volume. 1.8 g su 110 ml.
+        assert profile.acidity_pre == pytest.approx(1.8 / 110.0 * 100, abs=1e-9)
+
+    def test_acidity_is_weight_per_volume_before_and_after_dilution(self, daiquiri: Recipe) -> None:
+        """La dichiarazione "% w/v" deve valere anche per il valore calcolato.
+
+        Gli ingredienti portano l'acidità in g/100 ml; se il risultato fosse
+        g/g, `acidity_post` non sarebbe confrontabile con il dato di
+        partenza né con l'etichetta mostrata all'utente. L'acqua di fusione
+        entra nel denominatore come volume, e la massa d'acido si conserva.
+        """
+        profile = calculate_balance(daiquiri)
+
+        assert profile.acidity_post == pytest.approx(
+            profile.acid_mass_g / profile.final_volume_ml * 100.0
+        )
+        assert profile.acidity_post * profile.final_volume_ml / 100.0 == pytest.approx(
+            profile.acid_mass_g
+        )
 
     def test_dilution_lowers_every_intensive_quantity(self, daiquiri: Recipe) -> None:
         profile = calculate_balance(daiquiri)
@@ -78,39 +100,38 @@ class TestDaiquiri:
         assert profile.brix_post < profile.brix_pre
         assert profile.acidity_post < profile.acidity_pre
 
-    def test_sugar_acid_ratio_is_invariant_under_dilution(self, daiquiri: Recipe) -> None:
-        """L'acqua abbassa Brix e acidità nella stessa proporzione.
+    def test_sugar_acid_ratio_is_the_ratio_of_the_two_masses(self, daiquiri: Recipe) -> None:
+        """Zuccheri e acidi in grammi: nessuna unità di concentrazione di mezzo.
+
+        Brix è % peso e acidità è % p/v, quindi il loro quoziente
+        mescolerebbe due basi diverse. Il rapporto fra le masse è
+        adimensionale e dice la stessa cosa: quanti grammi di zucchero
+        bilanciano un grammo di acido.
+        """
+        profile = calculate_balance(daiquiri)
+        # 12.8253 g di zuccheri / 1.8 g di acidi
+        assert profile.sugar_acid_ratio == pytest.approx(12.8253 / 1.8, abs=1e-4)
+
+    def test_sugar_acid_ratio_does_not_depend_on_the_dilution(self, daiquiri: Recipe) -> None:
+        """L'acqua abbassa zuccheri e acidi nella stessa proporzione.
 
         È la proprietà che rende il rapporto l'indicatore stabile
-        dell'equilibrio: non dipende da quanto si è shakerato.
+        dell'equilibrio: non dipende da quanto si è shakerato, né dal
+        metodo. Si verifica cambiando la tecnica sulla stessa dose.
         """
-        profile = calculate_balance(daiquiri)
-        assert profile.sugar_acid_ratio is not None
-        post_ratio = profile.brix_post / profile.acidity_post
-        assert profile.sugar_acid_ratio == pytest.approx(post_ratio, rel=1e-9)
+        shaken = calculate_balance(daiquiri)
+        built = calculate_balance(replace(daiquiri, dilution_method=DilutionMethod.BUILT))
 
-    def test_sixty_thirty_twenty_lands_just_above_the_sour_window(self, daiquiri: Recipe) -> None:
-        """Con sciroppo 1:1, il 60/30/20 è più dolce della finestra classica.
+        assert shaken.dilution_water_ml > built.dilution_water_ml == 0.0
+        assert shaken.sugar_acid_ratio == pytest.approx(built.sugar_acid_ratio)
 
-        Il rapporto vale 7.88 contro un limite superiore di 7.0. Non è un
-        difetto del modello ma un suo risultato utile: il dosaggio
-        "canonico" che gira nei manuali presuppone spesso uno sciroppo
-        ricco 2:1, e con uno sciroppo 1:1 la stessa proporzione sposta il
-        drink verso il dolce. È esattamente il tipo di scarto che il
-        solver esiste per correggere.
-        """
-        profile = calculate_balance(daiquiri)
-        assert profile.sugar_acid_ratio == pytest.approx(7.884, abs=1e-3)
-        assert profile.sugar_acid_ratio > SOUR_RATIO_UPPER_BOUND
-        assert profile.is_balanced_sour is False
-
-    def test_reducing_the_syrup_brings_it_inside_the_window(
+    def test_reducing_the_syrup_lowers_the_ratio(
         self,
         white_rum: Ingredient,
         lime_juice: Ingredient,
         simple_syrup: Ingredient,
     ) -> None:
-        """60/30/15 con sciroppo 1:1 cade dentro la finestra dei sour."""
+        """60/30/15: meno sciroppo, meno zuccheri a parità di acidi."""
         recipe = Recipe(
             id="daiquiri-dry",
             name="Daiquiri (dry)",
@@ -124,9 +145,8 @@ class TestDaiquiri:
         )
         profile = calculate_balance(recipe)
 
-        assert profile.sugar_acid_ratio == pytest.approx(6.226, abs=1e-3)
-        assert SOUR_RATIO_LOWER_BOUND <= profile.sugar_acid_ratio <= SOUR_RATIO_UPPER_BOUND
-        assert profile.is_balanced_sour is True
+        # (30·1.03·0.017 + 15·1.23·0.50) / (30·0.06) = (0.5253 + 9.225) / 1.8
+        assert profile.sugar_acid_ratio == pytest.approx(9.7503 / 1.8, abs=1e-4)
 
 
 class TestNegroni:
@@ -147,6 +167,49 @@ class TestNegroni:
         assert profile.abv_post_percent == pytest.approx(profile.abv_post * 100)
         assert 18.0 < profile.abv_post_percent < 21.0
 
+    def test_trace_acids_do_not_make_a_sugar_acid_ratio(self, negroni: Recipe) -> None:
+        """Il Negroni non è "44 volte più dolce che acido": non è un sour.
+
+        Vermouth e Campari portano 0.15 + 0.12 = 0.27 g di acidi su 90 ml,
+        cioè 0.30 % p/v, sotto la soglia oltre la quale il drink ha un
+        carattere acido. Il quoziente grezzo (12.7 g di zuccheri / 0.29 g)
+        valeva 44 e la finestra dei sour lo leggeva come "stucchevole".
+        """
+        profile = calculate_balance(negroni)
+
+        # 30·0.005 + 30·0.004 = 0.27 g su 90 ml
+        assert profile.acid_mass_g == pytest.approx(0.27, abs=1e-9)
+        assert profile.acidity_pre == pytest.approx(0.27 / 90.0 * 100, abs=1e-9)
+        assert profile.acidity_pre < SUGAR_ACID_MIN_ACIDITY
+        assert profile.sugar_acid_ratio is None
+
+
+class TestGinTonic:
+    def test_tonic_sugar_over_trace_acid_is_not_a_ratio(self, gin_tonic: Recipe) -> None:
+        """Il caso dell'85: zuccheri veri della tonica, acido quasi assente.
+
+        150 ml di tonica a 8.5 °Bx portano 13.1 g di zuccheri; 0.1 % di
+        acidità sono 0.15 g su 200 ml (0.075 % p/v). Zuccheri e acidi sono
+        corretti, è il loro quoziente (85) a non voler dire nulla.
+        """
+        profile = calculate_balance(gin_tonic)
+
+        # 150·1.03·0.085 = 13.1325 g; 150·0.001 = 0.15 g
+        assert profile.sugar_mass_g == pytest.approx(13.1325, abs=1e-4)
+        assert profile.acid_mass_g == pytest.approx(0.15, abs=1e-9)
+        assert profile.sugar_acid_ratio is None
+
+
+class TestSugarAcidRatioFunction:
+    def test_ratio_exists_only_above_the_perceptible_acidity(self) -> None:
+        below = SUGAR_ACID_MIN_ACIDITY * 0.99
+        at = SUGAR_ACID_MIN_ACIDITY
+
+        assert sugar_acid_ratio(sugar_mass_g=12.0, acid_mass_g=1.0, acidity_pre=below) is None
+        assert sugar_acid_ratio(sugar_mass_g=12.0, acid_mass_g=1.0, acidity_pre=at) == (
+            pytest.approx(12.0)
+        )
+
 
 class TestEdgeCases:
     def test_an_immeasurably_small_acidity_counts_as_none(self) -> None:
@@ -155,13 +218,12 @@ class TestEdgeCases:
         Un'acidità denormale (10⁻³⁰⁹) non è zero, quindi superava la
         guardia `== 0` e faceva traboccare la divisione a infinito. Il
         valore si propagava silenzioso fino al profilo restituito: nessuna
-        eccezione, solo un numero che non esiste. La soglia di rilevabilità
-        lo tratta per quello che è — assenza di acido.
+        eccezione, solo un numero che non esiste. Ora la soglia di
+        acidità percepibile lo scarta a monte: un'acidità che non si
+        misura non produce un rapporto, tantomeno infinito.
         """
-        assert sugar_acid_ratio(brix=50.0, acidity=2.2e-309) is None
-        assert sugar_acid_ratio(brix=50.0, acidity=0.0) is None
-        # Appena sopra la soglia il rapporto torna a esistere.
-        assert sugar_acid_ratio(brix=50.0, acidity=1e-6) == pytest.approx(5e7)
+        assert sugar_acid_ratio(sugar_mass_g=50.0, acid_mass_g=2.2e-309, acidity_pre=0.0) is None
+        assert sugar_acid_ratio(sugar_mass_g=50.0, acid_mass_g=0.0, acidity_pre=0.0) is None
 
     def test_ratio_is_none_without_acids(
         self, white_rum: Ingredient, simple_syrup: Ingredient
@@ -181,7 +243,6 @@ class TestEdgeCases:
 
         assert profile.acidity_pre == pytest.approx(0.0)
         assert profile.sugar_acid_ratio is None
-        assert profile.is_balanced_sour is False
 
     def test_built_drink_is_served_undiluted(
         self, white_rum: Ingredient, lime_juice: Ingredient
@@ -229,9 +290,9 @@ class TestEdgeCases:
     ) -> None:
         """La massa finale include l'acqua di fusione a 1 g/ml.
 
-        È la conversione più facile da sbagliare del modello: Brix e
-        acidità sono rapporti di *massa*, mentre la diluizione è calcolata
-        in *volume*.
+        È la conversione più facile da sbagliare del modello: il Brix è un
+        rapporto di *massa*, mentre la diluizione è calcolata in *volume*
+        (l'acidità, che è per volume, usa invece il volume finale).
         """
         profile = calculate_balance(daiquiri)
         assert profile.final_mass_g == pytest.approx(

@@ -126,7 +126,9 @@ class Recipe:
     sono indipendenti (vedi `ServingIce`). `glass` è il bicchiere di
     servizio, facoltativo: se presente, fissa un tetto al volume del drink
     (vedi `domain/services/glassware`). `family` classifica il drink
-    (vedi `RecipeFamily`) ed è facoltativa: non entra in nessun calcolo.
+    (vedi `RecipeFamily`) ed è facoltativa: non entra in nessun calcolo
+    fisico, solo nel giudizio sul rapporto zuccheri/acidi, che vale per i
+    sour (`assess_sour_balance`).
 
     L'invariante che protegge è la coerenza del dosaggio — nessuna ricetta
     vuota, nessun ingrediente ripetuto (due dosi dello stesso ingrediente

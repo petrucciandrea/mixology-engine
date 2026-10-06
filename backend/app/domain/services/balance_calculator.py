@@ -9,40 +9,27 @@ invocarlo migliaia di volte senza costi nascosti.
 Riferimento: `docs/DOMAIN_MODEL_AND_MATH.md`, sezioni 2 e 3.
 
 Nota sulle unità, che è la sorgente di errore più comune in questo
-dominio: **ABV e densità lavorano sui volumi, Brix e acidità sulle
-masse**. Il Brix è una concentrazione in percentuale di peso, quindi
-ogni grandezza zuccherina o acida passa per la densità prima di essere
-sommata. Confondere i due assi produce risultati plausibili ma sbagliati
-del 10-20%, cioè la differenza fra un drink equilibrato e uno no.
+dominio: **ABV e acidità lavorano sui volumi, il Brix sulle masse**.
+L'ABV è % vol e l'acidità è % p/v (grammi di acido ogni 100 ml, come la
+dichiara l'etichetta di un succo): entrambi si sommano per volume, senza
+densità. Il Brix è una concentrazione in percentuale di peso, quindi ogni
+grandezza zuccherina passa per la densità prima di essere sommata.
+Confondere gli assi produce risultati plausibili ma sbagliati del 3-20%,
+cioè la differenza fra un drink equilibrato e uno no.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..balance import BalanceProfile
+from ..balance import SUGAR_ACID_MIN_ACIDITY, BalanceProfile
 from ..entities import Recipe, RecipeIngredient
 from . import dilution
 
 #: Densità dell'acqua di fusione del ghiaccio, in g/ml. Serve a convertire
-#: in massa il volume d'acqua aggiunto, perché Brix e acidità post-diluizione
-#: sono rapporti di massa.
+#: in massa il volume d'acqua aggiunto, perché il Brix post-diluizione è un
+#: rapporto di massa.
 WATER_DENSITY_G_ML = 1.0
-
-#: Soglia sotto la quale un'acidità è considerata assente, in % peso/volume.
-#:
-#: La guardia `acidity == 0` non basta: un valore denormale — 10⁻³⁰⁹, che il
-#: profilo fisico accetta perché è dentro [0, 10] — non è zero, supera il
-#: controllo e fa traboccare la divisione a infinito. Hypothesis ha trovato
-#: esattamente questo caso.
-#:
-#: La soglia non è un espediente numerico ma un fatto di dominio: 10⁻⁹ % w/v
-#: sono 10 nanogrammi di acido per 100 ml. Nessun titolatore lo misura e
-#: nessun palato lo percepisce, quindi un drink sotto questa soglia non ha
-#: un rapporto zuccheri/acidi "altissimo": non ne ha uno, esattamente come
-#: se l'acido non ci fosse. Il margine rispetto all'overflow è enorme —
-#: servirebbe un'acidità sotto 10⁻³⁰⁶ perché la divisione trabocchi.
-ACIDITY_DETECTION_FLOOR = 1e-9
 
 
 def total_volume_ml(items: Sequence[RecipeIngredient]) -> float:
@@ -71,12 +58,14 @@ def sugar_mass_g(items: Sequence[RecipeIngredient]) -> float:
 
 
 def acid_mass_g(items: Sequence[RecipeIngredient]) -> float:
-    """M_acid = Σ (V_i · densità_i · acidity_i / 100)"""
+    """M_acid = Σ (V_i · acidity_i / 100)
+
+    Senza densità: l'acidità è già in g per 100 ml, quindi moltiplicarla per
+    il volume dà direttamente i grammi. Passare per la densità (come per gli
+    zuccheri) gonfierebbe di 3-5% l'acido dei succhi.
+    """
     return sum(
-        item.volume_ml
-        * item.ingredient.physical_profile.density_g_ml
-        * (item.ingredient.physical_profile.acidity / 100.0)
-        for item in items
+        item.volume_ml * (item.ingredient.physical_profile.acidity / 100.0) for item in items
     )
 
 
@@ -87,16 +76,22 @@ def _ratio(numerator: float, denominator: float) -> float:
     return numerator / denominator
 
 
-def sugar_acid_ratio(brix: float, acidity: float) -> float | None:
-    """Brix / Acidity, o `None` quando non esistono acidi misurabili.
+def sugar_acid_ratio(sugar_mass_g: float, acid_mass_g: float, acidity_pre: float) -> float | None:
+    """Grammi di zucchero per grammo di acido, o `None` se non ha significato.
 
-    `None` e non 0 o infinito: un drink senza acidi non ha un rapporto
-    zuccheri/acidi *alto*, semplicemente non ne ha uno. Un Negroni non è
-    "infinitamente dolce", è un drink che non si giudica su quest'asse.
+    `None` e non 0 o infinito: un drink senza acidi percepibili non ha un
+    rapporto zuccheri/acidi *alto*, semplicemente non ne ha uno. Un Negroni
+    non è "44 volte più dolce che acido", è un drink che non si giudica su
+    quest'asse. La soglia è `SUGAR_ACID_MIN_ACIDITY` (% p/v): oltre a
+    escludere le tracce, tiene lontana la divisione da denominatori
+    denormali che la facevano traboccare (caso trovato da Hypothesis).
+
+    È un quoziente di masse e non Brix/acidità: i due sono in basi diverse
+    (% peso e % p/v), il loro rapporto dipenderebbe dalla densità del drink.
     """
-    if acidity < ACIDITY_DETECTION_FLOOR:
+    if acid_mass_g <= 0.0 or acidity_pre < SUGAR_ACID_MIN_ACIDITY:
         return None
-    return brix / acidity
+    return sugar_mass_g / acid_mass_g
 
 
 def calculate_balance(recipe: Recipe) -> BalanceProfile:
@@ -111,7 +106,7 @@ def calculate_balance(recipe: Recipe) -> BalanceProfile:
 
     abv_pre = _ratio(alcohol, volume)
     brix_pre = _ratio(sugar, mass) * 100.0
-    acidity_pre = _ratio(acid, mass) * 100.0
+    acidity_pre = _ratio(acid, volume) * 100.0
 
     factor = dilution.dilution_factor(recipe.dilution_method, abv_pre)
     water_ml = volume * factor
@@ -127,12 +122,12 @@ def calculate_balance(recipe: Recipe) -> BalanceProfile:
         abv_pre=abv_pre,
         brix_pre=brix_pre,
         acidity_pre=acidity_pre,
-        sugar_acid_ratio=sugar_acid_ratio(brix_pre, acidity_pre),
+        sugar_acid_ratio=sugar_acid_ratio(sugar, acid, acidity_pre),
         dilution_factor=factor,
         dilution_water_ml=water_ml,
         final_volume_ml=final_volume,
         final_mass_g=final_mass,
         abv_post=_ratio(alcohol, final_volume),
         brix_post=_ratio(sugar, final_mass) * 100.0,
-        acidity_post=_ratio(acid, final_mass) * 100.0,
+        acidity_post=_ratio(acid, final_volume) * 100.0,
     )

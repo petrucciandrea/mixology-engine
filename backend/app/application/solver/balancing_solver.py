@@ -61,7 +61,7 @@ from .models import (
 _EPSILON: Final[float] = 1e-9
 
 #: Scala di regolarizzazione del residuo sul rapporto zuccheri/acidi.
-#: In °Bx: sotto questa soglia le due grandezze sono rumore di misura.
+#: In grammi: sotto un milligrammo le due masse sono rumore di misura.
 _RATIO_SCALE_FLOOR: Final[float] = 1e-3
 
 #: Peso del termine di regolarizzazione di Tikhonov quando esistono
@@ -91,28 +91,33 @@ def _relative_squared_error(achieved: float, target: float) -> float:
     return ((achieved - target) / denominator) ** 2
 
 
-def _ratio_squared_error(brix: float, acidity: float, target_ratio: float) -> float:
+def _ratio_squared_error(sugar_mass_g: float, acid_mass_g: float, target_ratio: float) -> float:
     """Errore sul rapporto zuccheri/acidi, in forma **lineare e liscia**.
 
-    Il rapporto Brix/Acidity ha una singolarità in acidità nulla, e
+    Il rapporto zuccheri/acidi ha una singolarità in acido nullo, e
     valutarlo direttamente produce un obiettivo discontinuo: SLSQP stima
     il gradiente per differenze finite e su un salto non sa in che
     direzione muoversi.
 
     La riformulazione elimina la singolarità senza cambiare il problema.
-    Imporre Brix/Acidity = r equivale a imporre il residuo lineare
-    Brix − r·Acidity = 0, che è definito e derivabile ovunque, anche in
-    acidità nulla — dove anzi ha gradiente non nullo, e quindi spinge
-    correttamente il solver ad aggiungere acidità invece di fermarsi.
+    Imporre zuccheri/acidi = r equivale a imporre il residuo lineare
+    zuccheri − r·acidi = 0 (in grammi), che è definito e derivabile
+    ovunque, anche in acido nullo — dove anzi ha gradiente non nullo, e
+    quindi spinge correttamente il solver ad aggiungere acido invece di
+    fermarsi. Usa le masse e non il campo `sugar_acid_ratio` del profilo,
+    perché quello vale `None` sotto la soglia di acidità percepibile,
+    proprio dove il solver deve sapere in che direzione andare.
 
     Il denominatore è la norma euclidea dei due termini (con un pavimento
     che evita lo 0/0 sulla ricetta degenere senza zuccheri né acidi):
     rende l'errore adimensionale e confrontabile con gli altri, e limitato
     in [0, 2], quindi un solo target mal servito non può dominare la somma.
     """
-    scaled_acidity = target_ratio * acidity
-    residual = brix - scaled_acidity
-    scale = math.sqrt(brix * brix + scaled_acidity * scaled_acidity + _RATIO_SCALE_FLOOR**2)
+    scaled_acid = target_ratio * acid_mass_g
+    residual = sugar_mass_g - scaled_acid
+    scale = math.sqrt(
+        sugar_mass_g * sugar_mass_g + scaled_acid * scaled_acid + _RATIO_SCALE_FLOOR**2
+    )
     return (residual / scale) ** 2
 
 
@@ -247,7 +252,7 @@ class BalancingSolver:
             total += weights.acidity * _relative_squared_error(profile.acidity_post, target.acidity)
         if target.sugar_acid_ratio is not None:
             total += weights.sugar_acid_ratio * _ratio_squared_error(
-                profile.brix_pre, profile.acidity_pre, target.sugar_acid_ratio
+                profile.sugar_mass_g, profile.acid_mass_g, target.sugar_acid_ratio
             )
 
         # Regolarizzazione: scarto quadratico relativo dalle proporzioni

@@ -9,7 +9,12 @@ zuccheri residui di un rum invecchiato, il Brix di uno sciroppo d'agave)
 si è scelto un valore centrale e rappresentativo.
 
 Riferimenti per le grandezze meno ovvie:
-  * succo di lime ~6% di acido citrico, 7.5 °Bx; limone ~5.5% e 2.5 °Bx;
+  * il Brix è la massa di **zucchero** ogni 100 g, non la lettura del
+    rifrattometro, che conta anche gli acidi (~0.9 °Bx per punto di acidità):
+    un lime letto a 7.5 °Bx ha 1.7 g di zucchero ogni 100 g. Usare la lettura
+    gonfia di ~5 °Bx i succhi molto acidi e fa sembrare dolci i sour;
+  * succo di lime ~6% di acido citrico, 1.7 °Bx; limone ~5.5% e 2.5 °Bx;
+    pompelmo ~2% e 8 °Bx; frutto della passione ~3% e 11 °Bx;
   * sciroppo semplice 1:1 in peso = 50 °Bx, densità 1.23 g/ml;
   * sciroppo ricco 2:1 = 65 °Bx, densità 1.31 g/ml;
   * i liquori portano zucchero: il triple sec sta intorno ai 25 °Bx, e
@@ -19,7 +24,9 @@ Nomenclatura: marchio solo dove il prodotto è insostituibile (Campari,
 Aperol, Angostura...), nome generico altrove; vedi il commento su `BAR`.
 
 Lo script è idempotente: un ingrediente o una ricetta già presenti vengono
-saltati, quindi si può rilanciare senza duplicare nulla.
+saltati, quindi si può rilanciare senza duplicare nulla. Fanno eccezione le
+revisioni dichiarate: `SUPERSEDED_PROFILES` per i dati fisici degli
+ingredienti, `REVISED` per le dosi delle ricette.
 """
 
 from __future__ import annotations
@@ -759,7 +766,7 @@ BAR: tuple[Spec, ...] = (
         "Succo di Lime",
         IngredientCategory.JUICE,
         0.0,
-        7.5,
+        1.7,
         6.0,
         1.03,
         {"sour": 0.95, "citrus": 0.9, "herbaceous": 0.2},
@@ -777,7 +784,7 @@ BAR: tuple[Spec, ...] = (
         "Succo di Pompelmo",
         IngredientCategory.JUICE,
         0.0,
-        9.0,
+        8.0,
         2.0,
         1.04,
         {"sour": 0.6, "bitter": 0.4, "citrus": 0.85, "floral": 0.2},
@@ -804,7 +811,7 @@ BAR: tuple[Spec, ...] = (
         "Succo di Mirtillo Rosso",
         IngredientCategory.JUICE,
         0.0,
-        14.0,
+        13.0,
         1.0,
         1.06,
         {"sweet": 0.5, "sour": 0.55, "berry": 0.8, "astringency": 0.4},
@@ -831,7 +838,7 @@ BAR: tuple[Spec, ...] = (
         "Purea di Frutto della Passione",
         IngredientCategory.JUICE,
         0.0,
-        14.0,
+        11.0,
         3.0,
         1.05,
         {"sour": 0.65, "sweet": 0.45, "tropical_fruit": 0.95, "floral": 0.2},
@@ -1532,16 +1539,60 @@ async def rename_legacy(repository: SqlAlchemyIngredientRepository) -> None:
         print(f"Rinominato: {old_name} -> {new_name}")
 
 
+#: Profili fisici che una revisione dei dati ha sostituito, per nome.
+#:
+#: Il seed salta gli ingredienti già presenti, quindi correggere un valore in
+#: `BAR` non toccherebbe un database già popolato. Qui si ricorda il valore
+#: **precedente**: il seed riallinea un ingrediente solo se il suo profilo
+#: salvato coincide ancora con quello, cioè se nessuno l'ha ritoccato a mano.
+#: Una dispensa personalizzata non viene sovrascritta.
+#:
+#: Revisione "Brix = solo zuccheri": le letture rifrattometriche contavano
+#: anche gli acidi e gonfiavano il dolce dei succhi più acidi.
+SUPERSEDED_PROFILES: dict[str, PhysicalProfile] = {
+    "Succo di Lime": PhysicalProfile(density_g_ml=1.03, brix=7.5, acidity=6.0, abv=0.0),
+    "Succo di Pompelmo": PhysicalProfile(density_g_ml=1.04, brix=9.0, acidity=2.0, abv=0.0),
+    "Succo di Mirtillo Rosso": PhysicalProfile(density_g_ml=1.06, brix=14.0, acidity=1.0, abv=0.0),
+    "Purea di Frutto della Passione": PhysicalProfile(
+        density_g_ml=1.05, brix=14.0, acidity=3.0, abv=0.0
+    ),
+}
+
+
+def physical_profile_of(spec: Spec) -> PhysicalProfile:
+    return PhysicalProfile(
+        density_g_ml=spec.density, brix=spec.brix, acidity=spec.acidity, abv=spec.abv
+    )
+
+
+def revised_profile(stored: Ingredient, spec: Spec) -> PhysicalProfile | None:
+    """Il profilo corretto da applicare, o `None` se non c'è nulla da riallineare.
+
+    Riallinea solo un ingrediente che porta ancora il valore sostituito dalla
+    revisione: se l'utente l'ha modificato, quel dato è suo.
+    """
+    superseded = SUPERSEDED_PROFILES.get(spec.name)
+    if superseded is None or stored.physical_profile != superseded:
+        return None
+    return physical_profile_of(spec)
+
+
 async def seed_ingredients(session: AsyncSession) -> dict[str, Ingredient]:
     repository = SqlAlchemyIngredientRepository(session)
     catalogue: dict[str, Ingredient] = {}
     created = 0
+    realigned = 0
 
     await rename_legacy(repository)
 
     for spec in BAR:
         existing = await repository.get_by_name(spec.name)
         if existing is not None:
+            corrected = revised_profile(existing, spec)
+            if corrected is not None:
+                existing = await repository.save(replace(existing, physical_profile=corrected))
+                realigned += 1
+                print(f"Riallineato: {spec.name}")
             catalogue[spec.name] = existing
             continue
 
@@ -1549,18 +1600,16 @@ async def seed_ingredients(session: AsyncSession) -> dict[str, Ingredient]:
             id=str(uuid.uuid4()),
             name=spec.name,
             category=spec.category,
-            physical_profile=PhysicalProfile(
-                density_g_ml=spec.density,
-                brix=spec.brix,
-                acidity=spec.acidity,
-                abv=spec.abv,
-            ),
+            physical_profile=physical_profile_of(spec),
             flavor_profile=FlavorProfile.from_descriptors(**spec.flavor),
         )
         catalogue[spec.name] = await repository.add(ingredient)
         created += 1
 
-    print(f"Ingredienti: {created} creati, {len(BAR) - created} già presenti.")
+    print(
+        f"Ingredienti: {created} creati, {len(BAR) - created} già presenti"
+        f" ({realigned} riallineati)."
+    )
     return catalogue
 
 
