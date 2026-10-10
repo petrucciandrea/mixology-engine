@@ -15,11 +15,13 @@ from app.domain.entities import (
 from app.domain.enums import (
     DilutionMethod,
     GlassType,
+    Glassware,
     IngredientCategory,
     RecipeFamily,
     ServingIce,
 )
 from app.domain.errors import (
+    GlassNotInCatalogueError,
     IceDoesNotFitGlassError,
     InvalidPhysicalProfileError,
     InvalidRecipeError,
@@ -160,6 +162,27 @@ class TestRecipeServing:
     def test_a_spear_in_a_collins_is_valid(self, daiquiri: Recipe) -> None:
         collins = replace(daiquiri, glass=GlassType.COLLINS, serving_ice=ServingIce.SPEAR)
         assert collins.serving_ice is ServingIce.SPEAR
+
+    def test_the_glass_must_exist_in_the_catalogue(self, daiquiri: Recipe) -> None:
+        """Le linee di marca non producono ogni tipo: un tiki di Schott
+        Zwiesel non esiste, e una ricetta servita lì non si può servire."""
+        with pytest.raises(GlassNotInCatalogueError, match="TIKI.*SCHOTT_ZWIESEL"):
+            replace(daiquiri, glass=GlassType.TIKI, glassware=Glassware.SCHOTT_ZWIESEL)
+        assert issubclass(GlassNotInCatalogueError, InvalidRecipeError)
+
+    def test_other_is_allowed_in_every_catalogue(self, daiquiri: Recipe) -> None:
+        for glassware in Glassware:
+            recipe = replace(daiquiri, glass=GlassType.OTHER, glassware=glassware)
+            assert recipe.glassware is glassware
+
+    def test_compatibility_depends_on_the_catalogue(self, daiquiri: Recipe) -> None:
+        """Lo stesso tipo cambia misure da una linea all'altra: il tumbler
+        basso generico accoglie il cubo grosso, quello di Schott Zwiesel
+        (Ø 82 mm esterni, rastremato) no."""
+        generic = replace(daiquiri, glass=GlassType.ROCKS, serving_ice=ServingIce.LARGE_CUBE)
+        assert generic.serving_ice is ServingIce.LARGE_CUBE
+        with pytest.raises(IceDoesNotFitGlassError):
+            replace(generic, glassware=Glassware.SCHOTT_ZWIESEL)
 
     def test_without_a_glass_any_ice_is_valid(self, daiquiri: Recipe) -> None:
         for ice in ServingIce:

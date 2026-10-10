@@ -46,7 +46,7 @@ from scipy.optimize import minimize
 from app.domain.balance import BalanceProfile
 from app.domain.entities import Recipe
 from app.domain.services.balance_calculator import calculate_balance
-from app.domain.services.glassware import max_serving_volume_ml
+from app.domain.services.glassware import recipe_volume_cap_ml
 
 from .models import (
     SolverResult,
@@ -272,9 +272,7 @@ class BalancingSolver:
     @staticmethod
     def _glass_cap_ml(recipe: Recipe) -> float | None:
         """Tetto al volume del drink imposto dal bicchiere, se ne ha uno."""
-        if recipe.glass is None:
-            return None
-        return max_serving_volume_ml(recipe.glass, recipe.serving_ice)
+        return recipe_volume_cap_ml(recipe)
 
     def _build_constraints(
         self, recipe: Recipe, target: TargetProfile

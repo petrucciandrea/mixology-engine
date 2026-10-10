@@ -548,14 +548,51 @@ class TestRecipesApi:
         response = await client.get(f"{API}/glassware")
 
         assert response.status_code == 200
-        by_glass = {item["glass"]: item for item in response.json()}
-        assert by_glass["ROCKS"] == {
-            "glass": "ROCKS",
-            "capacity_ml": 350.0,
-            "compatible_ice": ["NONE", "CUBES", "LARGE_CUBE", "CRUSHED"],
-        }
-        assert "SPEAR" in by_glass["COLLINS"]["compatible_ice"]
-        assert by_glass["OTHER"]["capacity_ml"] is None
+        catalogues = {item["glassware"]: item for item in response.json()}
+        assert list(catalogues) == ["GENERIC", "LUIGI_BORMIOLI", "SCHOTT_ZWIESEL", "NUDE"]
+
+        generic = {glass["glass"]: glass for glass in catalogues["GENERIC"]["glasses"]}
+        rocks = generic["ROCKS"]
+        assert rocks["capacity_ml"] == 300.0
+        assert rocks["compatible_ice"] == ["NONE", "CUBES", "LARGE_CUBE", "CRUSHED"]
+        assert len(rocks["profile_mm"]) > 2
+        assert rocks["depth_mm"] < rocks["height_mm"]
+        assert "SPEAR" in generic["COLLINS"]["compatible_ice"]
+        assert "OTHER" not in generic
+
+        nude = {glass["glass"] for glass in catalogues["NUDE"]["glasses"]}
+        assert "TIKI" not in nude
+        assert all(
+            glass["source"].startswith("https://")
+            for glass in catalogues["SCHOTT_ZWIESEL"]["glasses"]
+        )
+
+    async def test_a_glass_missing_from_the_catalogue_is_rejected(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        base = daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20))
+        payload = {**base, "glass": "TIKI", "glassware": "SCHOTT_ZWIESEL"}
+
+        response = await client.post(f"{API}/balance", json=payload)
+
+        assert response.status_code == 422
+        assert response.json()["error"]["type"] == "GlassNotInCatalogueError"
+
+    async def test_the_catalogue_is_stored_and_returned(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        base = daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20))
+        default = await client.post(f"{API}/recipes", json=base)
+        assert default.json()["glassware"] == "GENERIC"
+
+        payload = {**base, "name": "Daiquiri Nude", "glass": "COUPE", "glassware": "NUDE"}
+        created = await client.post(f"{API}/recipes", json=payload)
+        assert created.status_code == 201
+        fetched = await client.get(f"{API}/recipes/{created.json()['id']}")
+        assert fetched.json()["glassware"] == "NUDE"
+
+        balance = await client.post(f"{API}/balance", json=payload)
+        assert balance.json()["glass_fit"]["capacity_ml"] == 222.0
 
     async def test_glass_is_a_closed_vocabulary(
         self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
@@ -574,8 +611,9 @@ class TestRecipesApi:
         assert (await client.post(f"{API}/balance", json=payload)).json()["glass_fit"] is None
 
         coupe = (await client.post(f"{API}/balance", json={**payload, "glass": "COUPE"})).json()
-        assert coupe["glass_fit"]["capacity_ml"] == 200
-        assert coupe["glass_fit"]["max_volume_ml"] == pytest.approx(180.0)
+        # Coppa generica da 210 ml: 210 × 0.9 = 189 ml.
+        assert coupe["glass_fit"]["capacity_ml"] == 210
+        assert coupe["glass_fit"]["max_volume_ml"] == pytest.approx(189.0)
         assert coupe["glass_fit"]["ice_volume_ml"] == 0
         assert coupe["glass_fit"]["volume_ml"] == pytest.approx(coupe["profile"]["final_volume_ml"])
         assert coupe["glass_fit"]["overflows"] is False
@@ -585,8 +623,8 @@ class TestRecipesApi:
                 f"{API}/balance", json={**payload, "glass": "ROCKS", "serving_ice": "CUBES"}
             )
         ).json()
-        # 350 × 0.9 × 0.35 = 110.25 ml di ghiaccio.
-        assert rocks["glass_fit"]["ice_volume_ml"] == pytest.approx(110.25)
+        # Tumbler basso generico da 300 ml: 300 × 0.9 × 0.35 = 94.5 ml di ghiaccio.
+        assert rocks["glass_fit"]["ice_volume_ml"] == pytest.approx(94.5)
 
         shot = (await client.post(f"{API}/balance", json={**payload, "glass": "SHOT"})).json()
         assert shot["glass_fit"]["overflows"] is True

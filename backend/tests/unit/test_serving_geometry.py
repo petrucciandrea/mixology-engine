@@ -1,10 +1,11 @@
-"""Geometria del servizio: pezzi di ghiaccio, bicchieri e compatibilità.
+"""Geometria del servizio: pezzi di ghiaccio, profili dei bicchieri, compatibilità.
 
-I valori attesi si calcolano a mano dalle misure dichiarate: un pezzo è un
-prisma a base quadrata (lato `w`, altezza `h`), un bicchiere un tronco di
-cono (diametro del fondo `d`, della bocca `D`, profondità `H`). Il pezzo
-entra se non sporge (`h ≤ H`) e se la sezione del bicchiere, alla quota a
-cui si appoggia, ne contiene la diagonale `w·√2` più il gioco.
+I valori attesi si calcolano a mano. Un pezzo di ghiaccio è un prisma a
+base quadrata (lato `w`, altezza `h`). Un bicchiere è un solido di
+rotazione: un profilo `d(t)` di diametri dal fondo (`t = 0`) alla bocca
+(`t = 1`) e una profondità `H`, ricavata dalla capienza dichiarata,
+`H = V / (π/4 · ⟨d²⟩)`. Un pezzo entra se, appoggiato dove la sezione ne
+contiene la diagonale `w·√2` più il gioco, non sporge dal bordo.
 """
 
 from __future__ import annotations
@@ -15,19 +16,23 @@ import pytest
 
 from app.domain.enums import GlassType, ServingIce
 from app.domain.errors import InvalidServingConditionsError
-from app.domain.services.glassware import GLASS_CAPACITY_ML
 from app.domain.serving_geometry import (
-    GLASS_GEOMETRY,
     ICE_CLEARANCE_MM,
     ICE_PIECES,
-    GlassGeometry,
+    WALL_THICKNESS_MM,
+    GlassModel,
+    GlassProfile,
+    GlassShape,
     IcePiece,
     compatible_ices,
     ice_fits,
 )
 
 ICED = [ice for ice in ServingIce if ice is not ServingIce.NONE]
-SIZED_GLASSES = [glass for glass in GlassType if glass is not GlassType.OTHER]
+
+
+def _cylinder(diameter_mm: float, depth_mm: float) -> GlassProfile:
+    return GlassProfile(depth_mm=depth_mm, diameters_mm=(diameter_mm,) * 9)
 
 
 class TestIcePiece:
@@ -72,102 +77,172 @@ class TestIcePiece:
             IcePiece(width_mm=width, height_mm=height, is_single=False)
 
 
-class TestGlassGeometry:
-    def test_a_cylinder_has_the_same_width_at_every_height(self) -> None:
-        cylinder = GlassGeometry(bottom_diameter_mm=80.0, mouth_diameter_mm=80.0, depth_mm=90.0)
-        assert cylinder.width_at(0.0) == cylinder.width_at(90.0) == 80.0
+class TestGlassProfile:
+    def test_a_cylinder_holds_its_section_times_its_depth(self) -> None:
+        cylinder = _cylinder(80.0, 90.0)
         # π/4 · 80² · 90 = 452 389 mm³.
         assert cylinder.volume_ml == pytest.approx(452.389, rel=1e-5)
+        assert cylinder.width_at(0.0) == cylinder.width_at(90.0) == 80.0
+        assert cylinder.mouth_diameter_mm == cylinder.max_diameter_mm == 80.0
 
-    def test_a_cone_widens_linearly_from_the_bottom(self) -> None:
-        cone = GlassGeometry(bottom_diameter_mm=0.0, mouth_diameter_mm=115.0, depth_mm=70.0)
-        assert cone.width_at(35.0) == pytest.approx(57.5)
-        # Cono: π/12 · D² · H.
-        assert cone.volume_ml == pytest.approx(math.pi / 12 * 115.0**2 * 70.0 / 1000.0)
+    def test_width_is_interpolated_between_samples(self) -> None:
+        cone = GlassProfile(depth_mm=100.0, diameters_mm=(0.0, 50.0, 100.0))
+        assert cone.width_at(25.0) == pytest.approx(25.0)
+        assert cone.width_at(75.0) == pytest.approx(75.0)
 
-    def test_rejects_impossible_dimensions(self) -> None:
-        with pytest.raises(InvalidServingConditionsError, match="dimensions"):
-            GlassGeometry(bottom_diameter_mm=50.0, mouth_diameter_mm=0.0, depth_mm=90.0)
+    def test_rejects_impossible_profiles(self) -> None:
+        with pytest.raises(InvalidServingConditionsError):
+            GlassProfile(depth_mm=0.0, diameters_mm=(50.0, 50.0))
+        with pytest.raises(InvalidServingConditionsError):
+            GlassProfile(depth_mm=90.0, diameters_mm=(50.0,))
+        with pytest.raises(InvalidServingConditionsError):
+            GlassProfile(depth_mm=90.0, diameters_mm=(50.0, 0.0))
 
-    @pytest.mark.parametrize("glass", SIZED_GLASSES)
-    def test_dimensions_agree_with_the_declared_capacity(self, glass: GlassType) -> None:
-        """Le misure non sono indipendenti dalla capienza: il tronco di cono
-        deve contenere quanto il bicchiere dichiara, entro il 10%."""
-        assert GLASS_GEOMETRY[glass].volume_ml == pytest.approx(GLASS_CAPACITY_ML[glass], rel=0.10)
 
-    def test_other_has_no_geometry(self) -> None:
-        assert GlassType.OTHER not in GLASS_GEOMETRY
+class TestGlassModel:
+    """La scheda dà misure esterne e capienza; la profondità della coppa si
+    ricava, così il profilo contiene esattamente la capienza dichiarata."""
+
+    def _tumbler(self, base_ratio: float = 1.0) -> GlassModel:
+        return GlassModel(
+            glass=GlassType.ROCKS,
+            product="Tumbler di prova",
+            capacity_ml=300.0,
+            height_mm=100.0,
+            diameter_mm=84.0,
+            shape=GlassShape.TUMBLER,
+            source="https://example.com/tumbler",
+            base_ratio=base_ratio,
+        )
+
+    def test_a_cylindrical_tumbler_gets_its_depth_from_the_capacity(self) -> None:
+        model = self._tumbler()
+        inner = 84.0 - 2 * WALL_THICKNESS_MM
+        # H = 300 000 mm³ / (π/4 · 80²) = 59.68 mm.
+        assert model.profile.depth_mm == pytest.approx(300_000.0 / (math.pi / 4 * inner**2))
+        assert model.profile.volume_ml == pytest.approx(300.0)
+        assert model.profile.max_diameter_mm == pytest.approx(inner)
+
+    def test_what_is_not_the_bowl_is_base_or_stem(self) -> None:
+        model = self._tumbler()
+        assert model.base_mm == pytest.approx(100.0 - model.profile.depth_mm)
+        assert not model.is_stemmed
+
+    def test_a_tapered_tumbler_is_narrower_at_the_bottom(self) -> None:
+        model = self._tumbler(base_ratio=0.8)
+        profile = model.profile
+        assert profile.width_at(0.0) == pytest.approx(0.8 * profile.mouth_diameter_mm)
+        assert profile.volume_ml == pytest.approx(300.0)
+        # Meno sezione in basso: per la stessa capienza serve più profondità.
+        assert profile.depth_mm > self._tumbler().profile.depth_mm
+
+    def test_a_cone_follows_its_diameter_linearly(self) -> None:
+        cone = GlassModel(
+            glass=GlassType.MARTINI,
+            product="Martini di prova",
+            capacity_ml=200.0,
+            height_mm=170.0,
+            diameter_mm=104.0,
+            shape=GlassShape.CONE,
+            source="https://example.com/martini",
+        )
+        inner = 104.0 - 2 * WALL_THICKNESS_MM
+        # Cono: V = π/12 · D² · H. Il profilo campionato lo approssima.
+        assert cone.profile.depth_mm == pytest.approx(
+            200_000.0 / (math.pi / 12 * inner**2), rel=0.01
+        )
+        assert cone.is_stemmed
+        assert cone.stem_mm == pytest.approx(170.0 - cone.profile.depth_mm)
+
+    def test_a_tulip_closes_towards_the_mouth(self) -> None:
+        wine = GlassModel(
+            glass=GlassType.WINE,
+            product="Calice di prova",
+            capacity_ml=350.0,
+            height_mm=220.0,
+            diameter_mm=84.0,
+            shape=GlassShape.TULIP,
+            source="https://example.com/calice",
+            rim_ratio=0.75,
+        )
+        profile = wine.profile
+        # Il massimo campionato può mancare di un soffio quello della curva.
+        assert profile.mouth_diameter_mm == pytest.approx(0.75 * profile.max_diameter_mm, rel=1e-3)
+        assert profile.mouth_diameter_mm < profile.max_diameter_mm
+
+    def test_declared_ratios_are_not_estimates_defaults_are(self) -> None:
+        def tulip(rim_ratio: float | None) -> GlassModel:
+            return GlassModel(
+                glass=GlassType.WINE,
+                product="Calice",
+                capacity_ml=350.0,
+                height_mm=220.0,
+                diameter_mm=84.0,
+                shape=GlassShape.TULIP,
+                source="https://example.com/calice",
+                rim_ratio=rim_ratio,
+            )
+
+        assert "rim_ratio" in tulip(None).estimated
+        assert "rim_ratio" not in tulip(0.7).estimated
+
+    def test_rejects_a_bowl_deeper_than_the_glass(self) -> None:
+        """Una scheda incoerente (troppa capienza per quelle misure) non deve
+        produrre un bicchiere impossibile in silenzio."""
+        with pytest.raises(InvalidServingConditionsError, match="deeper"):
+            GlassModel(
+                glass=GlassType.SHOT,
+                product="Bicchierino incoerente",
+                capacity_ml=500.0,
+                height_mm=60.0,
+                diameter_mm=45.0,
+                shape=GlassShape.TUMBLER,
+                source="https://example.com/shot",
+            )
 
 
 class TestIceFits:
-    def test_without_ice_every_glass_works(self) -> None:
-        for glass in GlassType:
-            assert ice_fits(glass, ServingIce.NONE)
-
-    def test_without_a_glass_or_with_an_unknown_one_nothing_is_excluded(self) -> None:
+    def test_without_ice_or_without_a_profile_everything_fits(self) -> None:
+        assert ice_fits(_cylinder(30.0, 20.0), ServingIce.NONE)
         for ice in ServingIce:
             assert ice_fits(None, ice)
-            assert ice_fits(GlassType.OTHER, ice)
 
-    def test_a_large_cube_does_not_enter_a_collins(self) -> None:
-        # Diagonale 70.7 mm + 4 di gioco contro una bocca da 62 mm.
-        collins = GLASS_GEOMETRY[GlassType.COLLINS]
-        assert collins.mouth_diameter_mm < 50.0 * math.sqrt(2) + ICE_CLEARANCE_MM
-        assert not ice_fits(GlassType.COLLINS, ServingIce.LARGE_CUBE)
+    def test_a_large_cube_needs_its_diagonal_plus_clearance(self) -> None:
+        needed = 50.0 * math.sqrt(2) + ICE_CLEARANCE_MM
+        assert ice_fits(_cylinder(needed + 0.1, 80.0), ServingIce.LARGE_CUBE)
+        assert not ice_fits(_cylinder(needed - 0.1, 80.0), ServingIce.LARGE_CUBE)
 
-    @pytest.mark.parametrize("glass", [GlassType.COUPE, GlassType.NICK_AND_NORA])
-    def test_a_large_cube_does_not_sit_in_a_small_cup(self, glass: GlassType) -> None:
-        assert not ice_fits(glass, ServingIce.LARGE_CUBE)
-
-    def test_a_spear_sticks_out_of_a_rocks_glass(self) -> None:
-        assert GLASS_GEOMETRY[GlassType.ROCKS].depth_mm < 120.0
-        assert not ice_fits(GlassType.ROCKS, ServingIce.SPEAR)
-
-    @pytest.mark.parametrize("glass", [GlassType.COLLINS, GlassType.HIGHBALL])
-    def test_a_spear_is_made_for_tall_narrow_glasses(self, glass: GlassType) -> None:
-        assert ice_fits(glass, ServingIce.SPEAR)
-
-    def test_a_large_cube_fits_a_rocks_glass(self) -> None:
-        assert ice_fits(GlassType.ROCKS, ServingIce.LARGE_CUBE)
+    def test_a_piece_must_not_stick_out(self) -> None:
+        assert ice_fits(_cylinder(60.0, 121.0), ServingIce.SPEAR)
+        assert not ice_fits(_cylinder(60.0, 119.0), ServingIce.SPEAR)
 
     def test_in_a_cone_the_piece_sits_where_the_section_holds_it(self) -> None:
-        """Martini (cono da 115 × 70 mm): un cubetto da 25 mm si appoggia
-        dove la sezione vale 35.4 + 4 mm, cioè a quota 24 mm, e arriva a
-        49 mm, sotto il bordo; il cubo grosso dovrebbe appoggiarsi a 45.5 mm
-        e arrivare a 95.5, ben oltre."""
-        assert ice_fits(GlassType.MARTINI, ServingIce.CUBES)
-        assert not ice_fits(GlassType.MARTINI, ServingIce.LARGE_CUBE)
+        """Cono da 115 mm di bocca e 70 di profondità: un cubetto da 25 mm
+        si appoggia dove la sezione vale 35.4 + 4 mm (quota 24 mm) e arriva
+        a 49 mm; il cubo grosso si appoggerebbe a 45.5 mm e arriverebbe a
+        95.5, oltre il bordo."""
+        cone = GlassProfile(depth_mm=70.0, diameters_mm=(0.0, 115.0))
+        assert ice_fits(cone, ServingIce.CUBES)
+        assert not ice_fits(cone, ServingIce.LARGE_CUBE)
 
-    def test_a_narrow_mouth_stops_a_piece_even_if_the_belly_could_hold_it(self) -> None:
-        """Calice: pancia da 75 mm, bocca da 65. Il cubo grosso ci starebbe
-        sul fondo, ma non passa dalla bocca."""
-        wine = GLASS_GEOMETRY[GlassType.WINE]
-        assert wine.bottom_diameter_mm >= 50.0 * math.sqrt(2) + ICE_CLEARANCE_MM - 1.0
-        assert not ice_fits(GlassType.WINE, ServingIce.LARGE_CUBE)
+    def test_a_narrow_mouth_stops_a_piece_the_belly_could_hold(self) -> None:
+        tulip = GlassProfile(depth_mm=110.0, diameters_mm=(60.0, 90.0, 80.0, 65.0))
+        assert not ice_fits(tulip, ServingIce.LARGE_CUBE)
+        assert ice_fits(tulip, ServingIce.CUBES)
 
-    @pytest.mark.parametrize("glass", SIZED_GLASSES)
-    def test_crushed_ice_fits_every_glass(self, glass: GlassType) -> None:
-        assert ice_fits(glass, ServingIce.CRUSHED)
+    def test_crushed_ice_fits_any_real_glass(self) -> None:
+        assert ice_fits(_cylinder(20.0, 10.0), ServingIce.CRUSHED)
 
 
 class TestCompatibleIces:
     def test_lists_only_what_fits_in_enum_order(self) -> None:
-        assert compatible_ices(GlassType.ROCKS) == (
+        rocks = _cylinder(82.0, 70.0)
+        assert compatible_ices(rocks) == (
             ServingIce.NONE,
             ServingIce.CUBES,
             ServingIce.LARGE_CUBE,
             ServingIce.CRUSHED,
         )
-        assert compatible_ices(GlassType.COLLINS) == (
-            ServingIce.NONE,
-            ServingIce.CUBES,
-            ServingIce.CRUSHED,
-            ServingIce.SPEAR,
-        )
 
-    @pytest.mark.parametrize("glass", [*GlassType, None])
-    def test_serving_neat_is_always_possible(self, glass: GlassType | None) -> None:
-        assert ServingIce.NONE in compatible_ices(glass)
-
-    def test_no_glass_means_no_restriction(self) -> None:
+    def test_no_profile_means_no_restriction(self) -> None:
         assert compatible_ices(None) == tuple(ServingIce)

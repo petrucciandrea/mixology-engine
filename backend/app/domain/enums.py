@@ -77,6 +77,23 @@ class GlassType(str, Enum):
     OTHER = "OTHER"
 
 
+class Glassware(str, Enum):
+    """Catalogo di bicchieri da cui viene il bicchiere della ricetta.
+
+    Lo stesso tipo (un Collins) ha misure diverse da una linea all'altra, e
+    con le misure cambiano capienza, ghiacci che entrano e disegno. La
+    ricetta ricorda il catalogo per restare riproducibile: i suoi calcoli
+    non cambiano se qualcuno sceglie un altro catalogo per le bozze nuove
+    (ADR-0013). `GENERIC` copre ogni tipo con misure tipiche; le linee di
+    marca solo i bicchieri che producono davvero.
+    """
+
+    GENERIC = "GENERIC"
+    LUIGI_BORMIOLI = "LUIGI_BORMIOLI"
+    SCHOTT_ZWIESEL = "SCHOTT_ZWIESEL"
+    NUDE = "NUDE"
+
+
 class RecipeFamily(str, Enum):
     """Famiglia di appartenenza di un drink, nel linguaggio del bar.
 

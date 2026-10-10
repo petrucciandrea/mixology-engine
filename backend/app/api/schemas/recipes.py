@@ -17,7 +17,7 @@ from app.domain.balance import (
     assess_sour_balance,
 )
 from app.domain.entities import Recipe
-from app.domain.enums import DilutionMethod, GlassType, RecipeFamily, ServingIce
+from app.domain.enums import DilutionMethod, GlassType, Glassware, RecipeFamily, ServingIce
 from app.domain.services.glassware import GlassFit
 from app.domain.services.serving_dilution import MAX_CONSUMPTION_MINUTES
 
@@ -51,6 +51,8 @@ class RecipeIn(BaseModel):
     serving_ice: ServingIce
     glass: GlassType | None = None
     family: RecipeFamily | None = None
+    #: Catalogo del bicchiere; senza indicazione, le misure generiche.
+    glassware: Glassware = Glassware.GENERIC
     ingredients: Annotated[list[RecipeIngredientIn], Field(min_length=1, max_length=20)]
     instructions: str | None = None
 
@@ -67,6 +69,7 @@ class RecipeOut(BaseModel):
     serving_ice: ServingIce
     glass: GlassType | None = None
     family: RecipeFamily | None = None
+    glassware: Glassware
     ingredients: list[RecipeIngredientOut]
     instructions: str | None = None
 
@@ -79,6 +82,7 @@ class RecipeOut(BaseModel):
             serving_ice=entity.serving_ice,
             glass=entity.glass,
             family=entity.family,
+            glassware=entity.glassware,
             instructions=entity.instructions,
             ingredients=[
                 RecipeIngredientOut(
