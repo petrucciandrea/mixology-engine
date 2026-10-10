@@ -47,17 +47,24 @@ Vale solo per le ricette con `serving_ice ≠ NONE` ed è un profilo **separato*
 Ipotesi tarabili (non costanti fisiche): $h = 300$ W/m²K, $U = 0.3$ W/K, $T_a = 20$ °C, volume di ghiaccio di riempimento = volume del drink, dimensioni dei pezzi, ghiaccio a 0 °C, nessun ghiaccio che si riforma, nessuno scambio diretto fra il ghiaccio emerso e l'aria.
 
 ## 5. Bicchiere di servizio e capienza
-`Recipe.glass` è un `GlassType` **facoltativo**. Se presente e con capienza nota (tutto tranne `OTHER`), pone un tetto al volume del drink servito. Ipotesi dichiarate in `domain/services/glassware.py`:
+`Recipe.glass` è un `GlassType` **facoltativo**; `Recipe.glassware` (default `GENERIC`) dice da quale catalogo viene (ADR-0013). Se il bicchiere ha misure (tutto tranne `OTHER`), pone un tetto al volume del drink servito. Ipotesi dichiarate in `domain/services/glassware.py`:
 
-- **Volume utile:** $V_{util} = C \cdot 0.9$, con $C$ capienza a filo bordo (bordo libero del 10%).
+- **Capienza:** quella dichiarata dalla scheda del bicchiere nel catalogo (`GlassModel.capacity_ml`, a colmo).
+- **Volume utile:** $V_{util} = C \cdot 0.9$ (bordo libero del 10%).
 - **Con ghiaccio di servizio** il solido occupa una quota $s = 0.35$ dello spazio utile: $V_{max} = V_{util}\,(1 - s)$, $V_{ghiaccio} = V_{util}\,s$ (`GlassFit.ice_volume_ml`). Senza ghiaccio $V_{max} = V_{util}$ e $V_{ghiaccio} = 0$.
 - **Vincolo:** $V_{final} \le V_{max}$ (disuguaglianza SLSQP, normalizzata su $V_{max}$). Se è presente anche il target `final_volume_ml` (uguaglianza) e $V_{target} > V_{max}$ il problema è `INFEASIBLE`.
 - **Riempimento:** $\text{fill} = V_{final} / V_{max}$; oltre 1 il drink trabocca (`GlassFit.overflows`).
 
-Limiti: capienze tipiche, non misure di produttore; $s$ tarato su drink classici serviti pieni; l'acqua di fusione che si aggiunge dopo il servizio sta nel bordo libero.
+Limiti: $s$ tarato su drink classici serviti pieni e uguale per ogni tipo di ghiaccio; l'acqua di fusione che si aggiunge dopo il servizio sta nel bordo libero.
 
-**Compatibilità ghiaccio–bicchiere** (`domain/serving_geometry.py`, ADR-0012). Il bicchiere è un tronco di cono (diametro del fondo $d$, della bocca $D$, profondità $H$; per calice e balloon $d$ è la pancia), con larghezza $w(z) = d + (D - d)\,z/H$; le misure si accordano con le capienze entro il 10%. Un pezzo di lato $a$ e altezza $h_p$ entra se
+**Profilo del bicchiere** (`domain/serving_geometry.py`, ADR-0013). Un bicchiere è un solido di rotazione con profilo $d(t) = D \cdot f(t)$, $t \in [0, 1]$ dal fondo della coppa alla bocca, dove $f$ è la curva della famiglia di forma (massimo 1) e $D$ il diametro massimo interno, quello della scheda meno due pareti da 2 mm. La profondità si ricava dalla capienza dichiarata:
 
-$$h_p \le H \quad\text{e}\quad \min\big(D,\; w(H - h_p)\big) \ge a\sqrt{2} + 4\ \text{mm}$$
+$$H = \frac{V}{\frac{\pi}{4}\,D^2\,\langle f^2 \rangle}$$
 
-cioè non sporge e, appoggiato col bordo superiore a filo, la sezione ne contiene la diagonale più il gioco. È un'invariante di `Recipe` (`IceDoesNotFitGlassError`); senza bicchiere, o con `OTHER`, nessun ghiaccio è escluso. `GET /api/v1/glassware` espone capienza e ghiacci compatibili per bicchiere.
+con $\langle f^2 \rangle$ integrato sullo stesso profilo campionato (49 punti, trapezi su $d^2$), così $V_{profilo} = V_{scheda}$ per costruzione. Il resto dell'altezza totale è stelo e piede, o fondo pieno; una coppa che non sta nel bicchiere (meno di 3 mm di fondo) rende la scheda invalida.
+
+**Compatibilità ghiaccio–bicchiere.** Un pezzo di lato $a$ e altezza $h_p$ ha bisogno di una sezione larga $a\sqrt{2} + 4$ mm. Si appoggia alla quota più bassa $z_0$ da cui **in su** ogni sezione è larga almeno così (deve passare per tutto ciò che sta sopra), e entra se
+
+$$z_0 + h_p \le H$$
+
+cioè se, appoggiato, non sporge. Se nemmeno la bocca è abbastanza larga, non entra. È un'invariante di `Recipe` (`IceDoesNotFitGlassError`), insieme all'esistenza del bicchiere nel catalogo (`GlassNotInCatalogueError`); senza bicchiere, o con `OTHER`, nessun ghiaccio è escluso. `GET /api/v1/glassware` espone cataloghi, profili e ghiacci compatibili.
