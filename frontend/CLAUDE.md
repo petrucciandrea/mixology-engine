@@ -30,6 +30,9 @@
   `glassShapes.ts` restano per icone e bicchieri senza misure. La linea per
   le bozze nuove è una preferenza del browser (`useGlasswarePreference`),
   il catalogo della ricetta viaggia nel payload (`glassware`).
+- `make fe-build` (e quindi `check-all`) compila in un container usa e
+  getta (`docker compose run --rm`): mai `npm run build` dentro il
+  container di `next dev`, che condivide `.next` e ne resterebbe rotto.
 
 Prossimo pezzo aperto: vista a rete del grafo dei sapori (D3) sopra
 `/match/graph` e `/match/bridge`, già pronti.
