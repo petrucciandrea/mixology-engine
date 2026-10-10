@@ -3,6 +3,7 @@
 import { DrinkGlass, type GlassBand } from "@/components/studio/DrinkGlass";
 import { Card, CardMeta, CardTitle } from "@/components/ui/card";
 import { useGlassShape } from "@/hooks/useGlassShape";
+import { shapeFor, shapeForModel } from "@/lib/glassShapes";
 import type { Dose } from "@/hooks/useRecipe";
 import { useTweenedVolumes } from "@/hooks/useTweenedVolumes";
 import { CATEGORY_COLORS } from "@/lib/categoryColors";
@@ -12,6 +13,7 @@ import {
   SERVING_ICE_LABELS,
   type BalanceProfile,
   type GlassFit,
+  type GlassModel,
   type GlassType,
   type RecipeFamily,
   type ServingIce,
@@ -31,6 +33,8 @@ interface GlassStageProps {
   doses: Dose[];
   profile: BalanceProfile | null;
   glass: GlassType | null;
+  /** Il bicchiere nel catalogo della ricetta; `null` senza misure. */
+  model: GlassModel | null;
   glassFit: GlassFit | null;
   servingIce: ServingIce;
   family: RecipeFamily | null;
@@ -42,12 +46,15 @@ export function GlassStage({
   doses,
   profile,
   glass,
+  model,
   glassFit,
   servingIce,
   family,
   moment,
 }: GlassStageProps) {
-  const shape = useGlassShape(glass);
+  // Con un bicchiere di catalogo si disegna la sua sagoma vera, in scala;
+  // senza misure resta la sagoma stilizzata del tipo.
+  const shape = useGlassShape(model !== null ? shapeForModel(model) : shapeFor(glass));
 
   const target: Record<string, number> = {};
   for (const dose of doses) target[dose.ingredient.id] = dose.volumeMl;
@@ -78,6 +85,7 @@ export function GlassStage({
         <CardTitle>Nel bicchiere</CardTitle>
         <CardMeta>
           {glassLabel}
+          {model !== null && ` · ${model.product}`}
           {glassFit !== null && ` · ${formatMl(glassFit.capacity_ml)} ml a filo`} ·{" "}
           {SERVING_ICE_LABELS[servingIce]}
         </CardMeta>

@@ -3,26 +3,26 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useReducedMotion } from "@/hooks/useReducedMotion";
-import { blendShapes, shapeFor, type GlassShape } from "@/lib/glassShapes";
-import type { GlassType } from "@/types/api";
+import { blendShapes, type GlassShape } from "@/lib/glassShapes";
 
 const MORPH_MS = 300;
 
 /**
- * La sagoma da disegnare per il bicchiere scelto, con il passaggio dalla
- * precedente.
+ * La sagoma da disegnare, con il passaggio dalla precedente. `target` deve
+ * avere un'identità stabile per lo stesso bicchiere (`shapeFor`,
+ * `shapeForModel` la garantiscono), o la trasformazione ripartirebbe a ogni
+ * render.
  *
  * Il punto di partenza è la sagoma *mostrata*, non quella del bicchiere
  * precedente: se si cambia bicchiere a metà trasformazione, la nuova parte
  * da dov'è l'occhio invece di saltare indietro.
  */
-export function useGlassShape(glass: GlassType | null): GlassShape {
+export function useGlassShape(target: GlassShape): GlassShape {
   const reducedMotion = useReducedMotion();
-  const [shape, setShape] = useState<GlassShape>(() => shapeFor(glass));
+  const [shape, setShape] = useState<GlassShape>(target);
   const shownRef = useRef(shape);
 
   useEffect(() => {
-    const target = shapeFor(glass);
     const origin = shownRef.current;
     if (reducedMotion || origin === target) {
       shownRef.current = target;
@@ -45,7 +45,7 @@ export function useGlassShape(glass: GlassType | null): GlassShape {
 
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [glass, reducedMotion]);
+  }, [target, reducedMotion]);
 
   return shape;
 }

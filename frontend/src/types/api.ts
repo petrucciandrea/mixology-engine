@@ -33,7 +33,7 @@ export const DILUTION_METHOD_LABELS: Record<DilutionMethod, string> = {
  * shakerato e servito su cubetti. `NONE` è "servito senza ghiaccio".
  * `SPEAR` è la colonna per i bicchieri alti e stretti. Il ghiaccio deve
  * entrare nel bicchiere: il backend rifiuta la coppia con
- * `IceDoesNotFitGlassError`, e `GlassSpec.compatible_ice` dice prima
+ * `IceDoesNotFitGlassError`, e `GlassModel.compatible_ice` dice prima
  * quali ghiacci ogni bicchiere accoglie.
  */
 export type ServingIce = "NONE" | "CUBES" | "LARGE_CUBE" | "CRUSHED" | "SPEAR";
@@ -212,6 +212,7 @@ export interface RecipeInput {
   dilution_method: DilutionMethod;
   serving_ice: ServingIce;
   glass?: GlassType | null;
+  glassware?: Glassware;
   family?: RecipeFamily | null;
   ingredients: RecipeIngredientInput[];
   instructions?: string | null;
@@ -228,6 +229,7 @@ export interface Recipe {
   dilution_method: DilutionMethod;
   serving_ice: ServingIce;
   glass: GlassType | null;
+  glassware: Glassware;
   family: RecipeFamily | null;
   ingredients: RecipeIngredient[];
   instructions: string | null;
@@ -301,12 +303,57 @@ export interface ServingProfile {
   acidity: number;
 }
 
-/** Un bicchiere del catalogo (`GET /glassware`): capienza, `null` se
-    ignota, e i ghiacci che ci entrano senza sporgere né incastrarsi. */
-export interface GlassSpec {
+/**
+ * Catalogo di bicchieri: da quale linea viene il bicchiere della ricetta.
+ * Lo stesso tipo ha misure diverse da una linea all'altra, quindi capienza,
+ * ghiacci ammessi e disegno dipendono dal catalogo. La ricetta lo ricorda;
+ * senza indicazione il backend usa `GENERIC`.
+ */
+export type Glassware = "GENERIC" | "LUIGI_BORMIOLI" | "SCHOTT_ZWIESEL" | "NUDE";
+
+export const DEFAULT_GLASSWARE: Glassware = "GENERIC";
+
+export type GlassShapeFamily =
+  | "TUMBLER"
+  | "COUPE"
+  | "CONE"
+  | "BELL"
+  | "TULIP"
+  | "BALLOON"
+  | "FLUTE"
+  | "TIKI"
+  | "HURRICANE";
+
+/**
+ * Un bicchiere di un catalogo (`GET /glassware`). Le misure sono quelle
+ * della scheda (esterne, capienza a colmo), `source` dice dove. Il profilo
+ * è ricavato dal backend: `profile_mm` sono i diametri interni della coppa
+ * dal fondo alla bocca, a quote equispaziate su `depth_mm`. `estimated`
+ * elenca i rapporti di forma presi per ipotesi.
+ */
+export interface GlassModel {
   glass: GlassType;
-  capacity_ml: number | null;
+  product: string;
+  capacity_ml: number;
+  height_mm: number;
+  diameter_mm: number;
+  shape: GlassShapeFamily;
+  source: string;
+  depth_mm: number;
+  stem_mm: number;
+  profile_mm: number[];
   compatible_ice: ServingIce[];
+  estimated: string[];
+}
+
+/** Una linea di bicchieri. Un tipo assente non c'è: la linea non lo
+    produce. `OTHER` non compare mai, non ha misure. */
+export interface GlasswareCatalogue {
+  glassware: Glassware;
+  name: string;
+  maker: string;
+  description: string;
+  glasses: GlassModel[];
 }
 
 /** Quanto il drink riempie il bicchiere; `fill_ratio` oltre 1 = trabocca. */

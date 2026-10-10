@@ -3,17 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, calculateBalance } from "@/lib/api";
-import type {
-  BalanceProfile,
-  GlassFit,
-  GlassType,
-  ServingProfile,
-  DilutionMethod,
-  ServingIce,
-  Ingredient,
-  Recipe,
-  RecipeFamily,
-  RecipeInput,
+import {
+  DEFAULT_GLASSWARE,
+  type BalanceProfile,
+  type GlassFit,
+  type GlassType,
+  type Glassware,
+  type ServingProfile,
+  type DilutionMethod,
+  type ServingIce,
+  type Ingredient,
+  type Recipe,
+  type RecipeFamily,
+  type RecipeInput,
 } from "@/types/api";
 
 export interface Dose {
@@ -57,6 +59,8 @@ export interface UseRecipeResult {
   servingIce: ServingIce;
   /** Bicchiere di servizio; `null` = non dichiarato, nessun tetto di volume. */
   glass: GlassType | null;
+  /** Catalogo da cui viene il bicchiere: ne decide misure e ghiacci ammessi. */
+  glassware: Glassware;
   /** Famiglia del drink; `null` = non classificata. Non entra nel calcolo,
       ma va portata fino al salvataggio: una PUT senza famiglia la azzererebbe. */
   family: RecipeFamily | null;
@@ -80,6 +84,7 @@ export interface UseRecipeResult {
   setMethod: (method: DilutionMethod) => void;
   setServingIce: (servingIce: ServingIce) => void;
   setGlass: (glass: GlassType | null) => void;
+  setGlassware: (glassware: Glassware) => void;
   setFamily: (family: RecipeFamily | null) => void;
   addIngredient: (ingredient: Ingredient) => void;
   removeIngredient: (ingredientId: string) => void;
@@ -88,7 +93,8 @@ export interface UseRecipeResult {
   loadRecipe: (recipe: Recipe) => void;
   markSaved: (recipe: Recipe) => void;
   forgetRecipeId: () => void;
-  reset: () => void;
+  /** Bozza vuota, con il catalogo indicato (le impostazioni). */
+  reset: (glassware?: Glassware) => void;
 }
 
 export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
@@ -96,6 +102,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
   const [method, setMethod] = useState<DilutionMethod>("SHAKEN");
   const [servingIce, setServingIce] = useState<ServingIce>("NONE");
   const [glass, setGlass] = useState<GlassType | null>(null);
+  const [glassware, setGlassware] = useState<Glassware>(DEFAULT_GLASSWARE);
   const [family, setFamily] = useState<RecipeFamily | null>(null);
   const [name, setName] = useState(initialName);
   const [recipeId, setRecipeId] = useState<string | null>(null);
@@ -119,13 +126,14 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
       dilution_method: method,
       serving_ice: servingIce,
       glass,
+      glassware,
       family,
       ingredients: doses.map((dose) => ({
         ingredient_id: dose.ingredient.id,
         volume_ml: dose.volumeMl,
       })),
     };
-  }, [doses, method, servingIce, glass, family, name]);
+  }, [doses, method, servingIce, glass, glassware, family, name]);
 
   useEffect(() => {
     if (recipeInput === null) {
@@ -210,6 +218,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     setMethod(recipe.dilution_method);
     setServingIce(recipe.serving_ice);
     setGlass(recipe.glass);
+    setGlassware(recipe.glassware);
     setFamily(recipe.family);
     setName(recipe.name);
     setRecipeId(recipe.id);
@@ -227,10 +236,11 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     setRecipeId(null);
   }, []);
 
-  const reset = useCallback(() => {
+  const reset = useCallback((next: Glassware = DEFAULT_GLASSWARE) => {
     setDoses([]);
     setServingIce("NONE");
     setGlass(null);
+    setGlassware(next);
     setFamily(null);
     setName(initialName);
     setRecipeId(null);
@@ -246,6 +256,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     method,
     servingIce,
     glass,
+    glassware,
     family,
     name,
     recipeId,
@@ -260,6 +271,7 @@ export function useRecipe(initialName = "Ricetta senza nome"): UseRecipeResult {
     setMethod,
     setServingIce,
     setGlass,
+    setGlassware,
     setFamily,
     addIngredient,
     removeIngredient,

@@ -19,6 +19,7 @@ import {
   SERVING_ICE_LABELS,
   type DilutionMethod,
   type GlassFit,
+  type GlassModel,
   type GlassType,
   type RecipeFamily,
   type ServingIce,
@@ -56,16 +57,25 @@ function iceOptions(allowed: readonly ServingIce[]): SegmentedOption<ServingIce>
 }
 
 /** La griglia dei bicchieri, compresa la scelta "nessuno": tutti visibili,
-    perché la forma si riconosce prima del nome. */
-function glassOptions(selected: GlassType | null): SegmentedOption<GlassType | null>[] {
+    perché la forma si riconosce prima del nome. Quelli che la linea scelta
+    non produce restano al loro posto, disabilitati. */
+function glassOptions(
+  selected: GlassType | null,
+  isAvailable: (glass: GlassType) => boolean,
+  catalogueName: string,
+): SegmentedOption<GlassType | null>[] {
   return [
     { value: null, label: <span aria-hidden>—</span>, ariaLabel: "Bicchiere: nessuno", title: "Nessuno" },
-    ...GLASS_TYPES.map((glass) => ({
-      value: glass,
-      label: <GlassIcon glass={glass} isActive={glass === selected} />,
-      ariaLabel: `Bicchiere: ${GLASS_LABELS[glass]}`,
-      title: GLASS_LABELS[glass],
-    })),
+    ...GLASS_TYPES.map((glass) => {
+      const available = isAvailable(glass);
+      return {
+        value: glass,
+        label: <GlassIcon glass={glass} isActive={glass === selected} />,
+        ariaLabel: `Bicchiere: ${GLASS_LABELS[glass]}`,
+        title: available ? GLASS_LABELS[glass] : `${GLASS_LABELS[glass]}: non presente in ${catalogueName}`,
+        disabled: !available,
+      };
+    }),
   ];
 }
 
@@ -81,6 +91,11 @@ interface DosePanelProps {
       ma disabilitati. */
   allowedIce: readonly ServingIce[];
   glass: GlassType | null;
+  /** Il bicchiere nel catalogo scelto; `null` senza misure. */
+  glassModel: GlassModel | null;
+  /** Nome del catalogo, per spiegare i bicchieri disabilitati. */
+  catalogueName: string;
+  isGlassAvailable: (glass: GlassType) => boolean;
   family: RecipeFamily | null;
   glassFit: GlassFit | null;
   onMethodChange: (method: DilutionMethod) => void;
@@ -98,6 +113,9 @@ export function DosePanel({
   servingIce,
   allowedIce,
   glass,
+  glassModel,
+  catalogueName,
+  isGlassAvailable,
   family,
   glassFit,
   onMethodChange,
@@ -160,7 +178,7 @@ export function DosePanel({
         <div>
           <Segmented
             ariaLabel="Bicchiere"
-            options={glassOptions(glass)}
+            options={glassOptions(glass, isGlassAvailable, catalogueName)}
             value={glass}
             onChange={onGlassChange}
             className="grid grid-cols-8 gap-[3px]"
@@ -168,6 +186,7 @@ export function DosePanel({
           />
           <p className="mt-1.5 text-[12.5px] text-soft">
             {glass === null ? "Nessun bicchiere" : GLASS_LABELS[glass]}
+            {glassModel !== null && <span className="text-muted"> · {glassModel.product}</span>}
             <span className="text-muted">
               {glassFit !== null
                 ? ` · tetto ${formatMl(glassFit.max_volume_ml)} ml`

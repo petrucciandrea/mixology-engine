@@ -10,7 +10,7 @@
 import type {
   BalanceResponse,
   FlavorDescriptors,
-  GlassSpec,
+  GlasswareCatalogue,
   Ingredient,
   IngredientCategory,
   Page,
@@ -165,10 +165,10 @@ export function deleteRecipe(recipeId: string): Promise<void> {
   return request<void>(`/recipes/${encodeURIComponent(recipeId)}`, { method: "DELETE" });
 }
 
-// --- Bicchieri ---------------------------------------------------------------
+// --- Cataloghi di bicchieri ---------------------------------------------------------------
 
-export function listGlassware(): Promise<GlassSpec[]> {
-  return request<GlassSpec[]>("/glassware");
+export function listGlassware(): Promise<GlasswareCatalogue[]> {
+  return request<GlasswareCatalogue[]>("/glassware");
 }
 
 // --- Bilanciamento ----------------------------------------------------------
