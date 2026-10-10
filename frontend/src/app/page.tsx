@@ -11,15 +11,26 @@ import { MatcherPanel } from "@/components/studio/MatcherPanel";
 import { PanelDock, type DockPanel } from "@/components/studio/PanelDock";
 import { PantryPanel } from "@/components/studio/PantryPanel";
 import { RecipeBookPanel } from "@/components/studio/RecipeBookPanel";
+import { SettingsPanel } from "@/components/studio/SettingsPanel";
 import { StudioHeader } from "@/components/studio/StudioHeader";
+import { useGlasswarePreference } from "@/hooks/useGlasswarePreference";
 import { useRecipe } from "@/hooks/useRecipe";
 import { useRecipeBook } from "@/hooks/useRecipeBook";
 import { useSolver } from "@/hooks/useSolver";
 import { ApiError, listGlassware, listIngredients } from "@/lib/api";
-import { allowedIce, fallbackIce, toCatalogue, type GlassCatalogue } from "@/lib/serving";
+import {
+  allowedIce,
+  fallbackIce,
+  isGlassAvailable,
+  modelFor,
+  toIndex,
+  type GlasswareIndex,
+} from "@/lib/serving";
 import type {
   DilutionMethod,
   GlassType,
+  Glassware,
+  GlasswareCatalogue,
   Ingredient,
   Recipe,
   ServingIce,
@@ -41,15 +52,25 @@ export default function StudioPage() {
     onApply: recipe.applyVolumes,
   });
 
-  // Il catalogo dei bicchieri dice quali ghiacci ciascuno accoglie. Se non
-  // arriva non si blocca nulla: l'editor resta usabile, e una coppia
-  // impossibile la rifiuta il backend con un errore leggibile.
-  const [glassware, setGlassware] = useState<GlassCatalogue | null>(null);
+  // I cataloghi di bicchieri danno misure, sagome e ghiacci ammessi. Se
+  // non arrivano non si blocca nulla: l'editor resta usabile, il bicchiere
+  // si disegna stilizzato, e una coppia impossibile la rifiuta il backend
+  // con un errore leggibile.
+  const [catalogues, setCatalogues] = useState<GlasswareCatalogue[] | null>(null);
+  const index = useMemo<GlasswareIndex | null>(
+    () => (catalogues === null ? null : toIndex(catalogues)),
+    [catalogues],
+  );
   useEffect(() => {
     listGlassware()
-      .then((specs) => setGlassware(toCatalogue(specs)))
-      .catch(() => setGlassware(null));
+      .then(setCatalogues)
+      .catch(() => setCatalogues(null));
   }, []);
+  // La bozza iniziale è vuota: adotta la linea salvata nelle impostazioni
+  // appena il browser la restituisce.
+  const [preferredGlassware, setPreferredGlassware] = useGlasswarePreference(
+    recipe.setGlassware,
+  );
 
   useEffect(() => {
     listIngredients({ limit: 200 })
@@ -71,8 +92,15 @@ export default function StudioPage() {
   // solver deve sapere che un esito in corso o in revisione non descrive
   // più la ricetta sul banco. Nome e famiglia non entrano nel calcolo.
   const { invalidate, clear } = solver;
-  const { setVolume, addIngredient, removeIngredient, setMethod, setServingIce, setGlass } =
-    recipe;
+  const {
+    setVolume,
+    addIngredient,
+    removeIngredient,
+    setMethod,
+    setServingIce,
+    setGlass,
+    setGlassware,
+  } = recipe;
 
   const editVolume = useCallback(
     (ingredientId: string, volumeMl: number) => {
@@ -114,15 +142,39 @@ export default function StudioPage() {
   // grosso passando al Collins): lo si sostituisce subito, invece di
   // mandare al backend una ricetta che rifiuterebbe.
   const currentIce = recipe.servingIce;
+  const currentGlass = recipe.glass;
+  const currentGlassware = recipe.glassware;
   const changeGlass = useCallback(
     (glass: GlassType | null) => {
       invalidate();
-      const allowed = allowedIce(glassware, glass);
+      const allowed = allowedIce(index, currentGlassware, glass);
       if (!allowed.includes(currentIce)) setServingIce(fallbackIce(allowed));
       setGlass(glass);
     },
-    [invalidate, setGlass, setServingIce, glassware, currentIce],
+    [invalidate, setGlass, setServingIce, index, currentGlassware, currentIce],
   );
+  // Cambiare linea può togliere il bicchiere (Schott Zwiesel non fa tiki)
+  // o restringerne le misure (il cubo grosso non entra più): si sistema
+  // la bozza subito, con gli stessi ripieghi del cambio di bicchiere.
+  const changeGlassware = useCallback(
+    (glassware: Glassware) => {
+      invalidate();
+      setGlassware(glassware);
+      if (currentGlass !== null && !isGlassAvailable(index, glassware, currentGlass)) {
+        setGlass(null);
+        return;
+      }
+      const allowed = allowedIce(index, glassware, currentGlass);
+      if (!allowed.includes(currentIce)) setServingIce(fallbackIce(allowed));
+    },
+    [invalidate, setGlassware, setGlass, setServingIce, index, currentGlass, currentIce],
+  );
+
+
+  function selectGlassware(glassware: Glassware) {
+    setPreferredGlassware(glassware);
+    changeGlassware(glassware);
+  }
 
   function loadRecipe(target: Recipe) {
     clear();
@@ -133,9 +185,11 @@ export default function StudioPage() {
 
   function resetRecipe() {
     clear();
-    recipe.reset();
+    recipe.reset(preferredGlassware);
     setMinutes(0);
   }
+
+  const glassModel = modelFor(index, recipe.glassware, recipe.glass);
 
   // Il nome vuoto lo rifiuterebbe comunque il dominio: disabilitare il
   // pulsante evita un giro al backend solo per sentirselo dire.
@@ -228,6 +282,13 @@ export default function StudioPage() {
                 onLoad={loadRecipe}
                 onDelete={(target) => void deleteRecipe(target)}
               />
+            ) : open === "settings" ? (
+              <SettingsPanel
+                catalogues={catalogues}
+                preferred={preferredGlassware}
+                current={recipe.glassware}
+                onSelect={selectGlassware}
+              />
             ) : open === "pantry" ? (
               <PantryPanel
                 ingredients={ingredients}
@@ -245,8 +306,11 @@ export default function StudioPage() {
           doses={recipe.doses}
           method={recipe.method}
           servingIce={recipe.servingIce}
-          allowedIce={allowedIce(glassware, recipe.glass)}
+          allowedIce={allowedIce(index, recipe.glassware, recipe.glass)}
           glass={recipe.glass}
+          glassModel={glassModel}
+          catalogueName={index?.get(recipe.glassware)?.catalogue.name ?? "questo catalogo"}
+          isGlassAvailable={(glass) => isGlassAvailable(index, recipe.glassware, glass)}
           family={recipe.family}
           glassFit={recipe.glassFit}
           onMethodChange={changeMethod}
@@ -262,6 +326,7 @@ export default function StudioPage() {
           doses={recipe.doses}
           profile={recipe.profile}
           glass={recipe.glass}
+          model={glassModel}
           glassFit={recipe.glassFit}
           servingIce={recipe.servingIce}
           family={recipe.family}

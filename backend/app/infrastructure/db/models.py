@@ -35,6 +35,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.domain.enums import (
     DilutionMethod,
     GlassType,
+    Glassware,
     IngredientCategory,
     RecipeFamily,
     ServingIce,
@@ -113,6 +114,9 @@ class RecipeModel(Base):
     )
     family: Mapped[RecipeFamily | None] = mapped_column(
         Enum(RecipeFamily, native_enum=False, length=16), nullable=True
+    )
+    glassware: Mapped[Glassware] = mapped_column(
+        Enum(Glassware, native_enum=False, length=24), nullable=False
     )
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

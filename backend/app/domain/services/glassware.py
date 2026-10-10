@@ -1,28 +1,28 @@
-"""Bicchieri: capienza, volume utile e verifica del riempimento.
+"""Bicchieri: volume utile e verifica del riempimento.
 
-Il bicchiere pone un tetto al volume del drink servito. Il modello ha due
-ipotesi dichiarate, da tarare come quelle del ghiaccio di servizio:
+Il bicchiere pone un tetto al volume del drink servito. Capienza e misure
+vengono dal modello del catalogo della ricetta (`glassware_catalogues`,
+ADR-0013); qui restano le due ipotesi sul servizio, da tarare come quelle
+del ghiaccio:
 
 1. **Bordo libero.** Nessuno serve a filo: si riempie al più il
    `USABLE_FILL_FRACTION` della capienza, per non versare camminando.
-2. **Il ghiaccio occupa spazio.** Con ghiaccio di servizio una quota
-   `ICE_SHARE_OF_USABLE_VOLUME` dello spazio utile è ghiaccio solido, e il
-   drink ne occupa il resto. Non è `ICE_VOLUME_PER_DRINK_VOLUME` del
-   modello di servizio: quella è la massa termica disponibile al
-   raffreddamento, questa è lo spazio che il solido sottrae al liquido —
-   i cubetti si impilano lasciando vuoti e sporgono sopra il livello, quindi
-   spostano meno di quanto la massa farebbe pensare. Il valore è tarato su
-   drink classici notoriamente "pieni" (Garibaldi, Cuba Libre) e va rivisto
-   con misure reali.
+2. **Il ghiaccio occupa spazio**, in due modi diversi (ADR-0013).
+   - Il **pezzo unico** (cubo grosso, colonna) è un solido che sta tutto
+     sotto il bordo — la compatibilità lo garantisce — e sottrae al drink
+     esattamente il suo volume.
+   - Il ghiaccio che **riempie** (cubetti, tritato) occupa una quota
+     `ICE_SHARE_OF_USABLE_VOLUME` dello spazio utile. Non è
+     `ICE_VOLUME_PER_DRINK_VOLUME` del modello di servizio: quella è la
+     massa termica disponibile al raffreddamento, questa è lo spazio che il
+     solido sottrae al liquido — i cubetti si impilano lasciando vuoti e
+     sporgono sopra il livello, quindi spostano meno di quanto la massa
+     farebbe pensare.
 
-La geometria del bicchiere (misure, e quindi quali ghiacci ci entrano) sta
-in `serving_geometry`, perché anche l'aggregate `Recipe` la consulta; qui
-il catalogo la mette accanto alla capienza per chi deve scegliere.
-
-Limiti dichiarati: la capienza è un valore tipico per tipo di bicchiere
-(le misure reali variano per produttore), e l'acqua di fusione del ghiaccio
-di servizio che si aggiunge dopo non è conteggiata — sta nel bordo libero.
-`OTHER` non ha capienza nota e quindi non pone alcun limite.
+Limiti dichiarati: l'acqua di fusione del ghiaccio di servizio che si
+aggiunge dopo non è conteggiata (sta nel bordo libero), e la quota del
+ghiaccio di riempimento è tarata, non misurata. `OTHER`, senza misure, non
+pone limiti.
 """
 
 from __future__ import annotations
@@ -31,26 +31,9 @@ from dataclasses import dataclass
 from typing import Final
 
 from ..entities import Recipe
-from ..enums import GlassType, ServingIce
-from ..serving_geometry import compatible_ices
-
-#: Capienza a filo bordo, in ml, per un bicchiere tipico del tipo.
-GLASS_CAPACITY_ML: Final[dict[GlassType, float]] = {
-    GlassType.COUPE: 200.0,
-    GlassType.MARTINI: 240.0,
-    GlassType.NICK_AND_NORA: 170.0,
-    GlassType.ROCKS: 350.0,
-    GlassType.DOUBLE_ROCKS: 450.0,
-    GlassType.HIGHBALL: 360.0,
-    GlassType.COLLINS: 420.0,
-    GlassType.FLUTE: 200.0,
-    GlassType.WINE: 350.0,
-    GlassType.BALLOON: 600.0,
-    GlassType.COPPER_MUG: 400.0,
-    GlassType.TIKI: 450.0,
-    GlassType.HURRICANE: 450.0,
-    GlassType.SHOT: 60.0,
-}
+from ..enums import ServingIce
+from ..glassware_catalogues import glass_model
+from ..serving_geometry import ICE_PIECES, GlassModel
 
 #: Quota della capienza riempibile senza rischio di versare.
 USABLE_FILL_FRACTION: Final[float] = 0.9
@@ -59,15 +42,25 @@ USABLE_FILL_FRACTION: Final[float] = 0.9
 ICE_SHARE_OF_USABLE_VOLUME: Final[float] = 0.35
 
 
-def max_serving_volume_ml(glass: GlassType, serving_ice: ServingIce) -> float | None:
-    """Volume massimo del drink nel bicchiere, o `None` se non c'è un limite."""
-    capacity = GLASS_CAPACITY_ML.get(glass)
-    if capacity is None:
-        return None
-    usable = capacity * USABLE_FILL_FRACTION
+def ice_space_ml(model: GlassModel, serving_ice: ServingIce) -> float:
+    """Spazio che il ghiaccio di servizio sottrae al drink nel bicchiere."""
     if serving_ice is ServingIce.NONE:
-        return usable
-    return usable * (1.0 - ICE_SHARE_OF_USABLE_VOLUME)
+        return 0.0
+    piece = ICE_PIECES[serving_ice]
+    if piece.is_single:
+        return piece.volume_ml
+    return model.capacity_ml * USABLE_FILL_FRACTION * ICE_SHARE_OF_USABLE_VOLUME
+
+
+def max_serving_volume_ml(model: GlassModel, serving_ice: ServingIce) -> float:
+    """Volume massimo del drink nel bicchiere, accanto al suo ghiaccio."""
+    return model.capacity_ml * USABLE_FILL_FRACTION - ice_space_ml(model, serving_ice)
+
+
+def recipe_volume_cap_ml(recipe: Recipe) -> float | None:
+    """Tetto al volume del drink per la ricetta, o `None` se non ce n'è uno."""
+    model = glass_model(recipe.glassware, recipe.glass)
+    return None if model is None else max_serving_volume_ml(model, recipe.serving_ice)
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,41 +85,18 @@ class GlassFit:
 
 
 def assess_glass_fit(recipe: Recipe, volume_ml: float) -> GlassFit | None:
-    """Riempimento del bicchiere della ricetta, o `None` se non ne ha uno.
+    """Riempimento del bicchiere della ricetta, o `None` se non ne ha uno
+    con misure note.
 
     `volume_ml` è il volume del drink servito (`BalanceProfile.final_volume_ml`).
     """
-    if recipe.glass is None:
+    model = glass_model(recipe.glassware, recipe.glass)
+    if model is None:
         return None
-    max_volume = max_serving_volume_ml(recipe.glass, recipe.serving_ice)
-    if max_volume is None:
-        return None
-    capacity = GLASS_CAPACITY_ML[recipe.glass]
+    max_volume = max_serving_volume_ml(model, recipe.serving_ice)
     return GlassFit(
-        capacity_ml=capacity,
+        capacity_ml=model.capacity_ml,
         max_volume_ml=max_volume,
-        ice_volume_ml=capacity * USABLE_FILL_FRACTION - max_volume,
+        ice_volume_ml=ice_space_ml(model, recipe.serving_ice),
         volume_ml=volume_ml,
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class GlassSpec:
-    """Un bicchiere come lo vede chi compone: capienza e ghiacci che accoglie."""
-
-    glass: GlassType
-    #: `None` per `OTHER`, che non ha capienza nota.
-    capacity_ml: float | None
-    compatible_ice: tuple[ServingIce, ...]
-
-
-def glass_catalogue() -> tuple[GlassSpec, ...]:
-    """Tutti i bicchieri, nell'ordine dell'enum."""
-    return tuple(
-        GlassSpec(
-            glass=glass,
-            capacity_ml=GLASS_CAPACITY_ML.get(glass),
-            compatible_ice=compatible_ices(glass),
-        )
-        for glass in GlassType
     )

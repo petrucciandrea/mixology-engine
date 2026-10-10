@@ -48,6 +48,7 @@ def _to_draft(payload: RecipeIn) -> DraftRecipe:
         serving_ice=payload.serving_ice,
         glass=payload.glass,
         family=payload.family,
+        glassware=payload.glassware,
         ingredients=tuple(
             DraftIngredient(ingredient_id=item.ingredient_id, volume_ml=item.volume_ml)
             for item in payload.ingredients

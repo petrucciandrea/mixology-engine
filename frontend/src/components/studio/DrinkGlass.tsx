@@ -3,6 +3,7 @@
 import { useId, type CSSProperties, type ReactNode } from "react";
 
 import {
+  PX_PER_MM,
   TALLEST_GLASS_PX,
   levelForFraction,
   sliceOutline,
@@ -64,14 +65,16 @@ const VIEW_HEIGHT = VIEW_BOTTOM - VIEW_TOP;
 const CENTRE_X = VIEW_WIDTH / 2;
 const OUTLINE = "#4a5852";
 
-/** Lato del cubetto, in unità del viewBox, a ghiaccio intatto. Per la
-    colonna è il lato della sezione; l'altezza è `SPEAR_ASPECT` volte tanto,
-    come il pezzo da 30 × 120 mm del backend. */
+/** Lato del pezzo a ghiaccio intatto, in unità del viewBox: le misure del
+    backend (cubetti 25 mm, cubo grosso 50, tritato ~6, colonna 30 di
+    sezione) alla stessa scala dei bicchieri. Per la colonna l'altezza è
+    `SPEAR_ASPECT` volte il lato, come il pezzo da 30 × 120 mm. Il tritato
+    si disegna un po' più grosso del vero: a 4 unità sparirebbe. */
 const ICE_SIZE: Record<Exclude<ServingIce, "NONE">, number> = {
-  CUBES: 24,
-  LARGE_CUBE: 52,
-  CRUSHED: 8,
-  SPEAR: 28,
+  CUBES: 25 * PX_PER_MM,
+  LARGE_CUBE: 50 * PX_PER_MM,
+  CRUSHED: 8 * PX_PER_MM,
+  SPEAR: 30 * PX_PER_MM,
 };
 const SPEAR_ASPECT = 4;
 

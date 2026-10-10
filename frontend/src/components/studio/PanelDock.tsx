@@ -4,14 +4,15 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-export type DockPanel = "book" | "pantry" | "match";
+export type DockPanel = "book" | "pantry" | "match" | "settings";
 
-const PANELS: readonly DockPanel[] = ["book", "pantry", "match"];
+const PANELS: readonly DockPanel[] = ["book", "pantry", "match", "settings"];
 
 const TITLES: Record<DockPanel, string> = {
   book: "Ricettario",
   pantry: "Dispensa",
   match: "Matcher",
+  settings: "Impostazioni",
 };
 
 const DRAWER_ID = "studio-drawer";
@@ -24,7 +25,8 @@ interface PanelDockProps {
 }
 
 /**
- * Ricettario, dispensa e matcher in un cassetto, non in colonne fisse.
+ * Ricettario, dispensa, matcher e impostazioni in un cassetto, non in
+ * colonne fisse.
  *
  * Si consultano per scegliere — una ricetta da cui partire, un ingrediente
  * da aggiungere — e poi si torna al banco: tenerli sempre aperti ruberebbe

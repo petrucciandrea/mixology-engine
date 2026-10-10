@@ -16,14 +16,23 @@ import math
 from dataclasses import dataclass, replace
 from typing import Final
 
-from .enums import DilutionMethod, GlassType, IngredientCategory, RecipeFamily, ServingIce
+from .enums import (
+    DilutionMethod,
+    GlassType,
+    Glassware,
+    IngredientCategory,
+    RecipeFamily,
+    ServingIce,
+)
 from .errors import (
+    GlassNotInCatalogueError,
     IceDoesNotFitGlassError,
     InvalidPhysicalProfileError,
     InvalidRecipeError,
     InvalidVolumeError,
 )
 from .flavor import FlavorProfile
+from .glassware_catalogues import glass_model
 from .serving_geometry import ice_fits
 
 # ---------------------------------------------------------------------------
@@ -131,7 +140,10 @@ class Recipe:
     `dilution_method` descrive come si prepara, `serving_ice` come si serve:
     sono indipendenti (vedi `ServingIce`). `glass` è il bicchiere di
     servizio, facoltativo: se presente, fissa un tetto al volume del drink
-    (vedi `domain/services/glassware`). `family` classifica il drink
+    (vedi `domain/services/glassware`). `glassware` è il catalogo da cui il
+    bicchiere viene: le sue misure decidono capienza e ghiacci ammessi, e
+    la ricetta lo ricorda perché i suoi calcoli non cambino se cambia il
+    catalogo scelto per le bozze (ADR-0013). `family` classifica il drink
     (vedi `RecipeFamily`) ed è facoltativa: non entra in nessun calcolo
     fisico, solo nel giudizio sul rapporto zuccheri/acidi, che vale per i
     sour (`assess_sour_balance`).
@@ -140,9 +152,10 @@ class Recipe:
     ricetta vuota, nessun ingrediente ripetuto (due dosi dello stesso
     ingrediente sono una sola dose sommata, e tenerle separate renderebbe
     ambiguo il risultato del solver, che assegna un volume per posizione) —
-    e quella del servizio: il ghiaccio deve entrare nel bicchiere
-    (`serving_geometry.ice_fits`). Un cubo grosso in un Collins non è una
-    scelta di stile discutibile, è un drink che non si può servire.
+    e quella del servizio: il bicchiere deve esistere nel catalogo e il
+    ghiaccio deve entrarci (`serving_geometry.ice_fits`). Un cubo grosso in
+    un Collins non è una scelta di stile discutibile, è un drink che non si
+    può servire.
     """
 
     id: str
@@ -153,6 +166,7 @@ class Recipe:
     instructions: str | None = None
     glass: GlassType | None = None
     family: RecipeFamily | None = None
+    glassware: Glassware = Glassware.GENERIC
 
     def __post_init__(self) -> None:
         if not self.id.strip():
@@ -171,10 +185,18 @@ class Recipe:
                 )
             seen.add(item.ingredient.id)
 
-        if not ice_fits(self.glass, self.serving_ice):
+        model = glass_model(self.glassware, self.glass)
+        glass = self.glass.value if self.glass is not None else "none"
+        # `OTHER` non ha misure in nessun catalogo: è "un bicchiere fuori
+        # elenco", non un bicchiere che manca.
+        if model is None and self.glass not in (None, GlassType.OTHER):
+            raise GlassNotInCatalogueError(
+                f"glass {glass} is not in the {self.glassware.value} catalogue"
+            )
+        if not ice_fits(model.profile if model is not None else None, self.serving_ice):
             raise IceDoesNotFitGlassError(
-                f"serving ice {self.serving_ice.value} does not fit glass "
-                f"{self.glass.value if self.glass is not None else None}"
+                f"serving ice {self.serving_ice.value} does not fit glass {glass} "
+                f"of the {self.glassware.value} catalogue"
             )
 
     @property

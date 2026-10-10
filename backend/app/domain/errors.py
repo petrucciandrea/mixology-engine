@@ -42,6 +42,14 @@ class IceDoesNotFitGlassError(InvalidRecipeError):
     """
 
 
+class GlassNotInCatalogueError(InvalidRecipeError):
+    """Il bicchiere della ricetta non esiste nel catalogo scelto.
+
+    Le linee di marca non producono ogni tipo (nessuna ha il mug di rame):
+    una ricetta in un Tiki di Schott Zwiesel non si può servire.
+    """
+
+
 class EntityNotFoundError(DomainError):
     """L'entità richiesta non esiste nel repository."""
 

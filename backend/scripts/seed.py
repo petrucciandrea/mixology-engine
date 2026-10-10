@@ -1641,8 +1641,8 @@ CLASSIC_GLASSES: dict[str, GlassType] = {
     "Negroni": GlassType.ROCKS,
     "Old Fashioned": GlassType.ROCKS,
     "Whiskey Sour": GlassType.ROCKS,
-    "Gold Rush": GlassType.ROCKS,
-    "Penicillin": GlassType.ROCKS,
+    "Gold Rush": GlassType.DOUBLE_ROCKS,
+    "Penicillin": GlassType.DOUBLE_ROCKS,
     "Tommy's Margarita": GlassType.ROCKS,
     "Amaretto Sour": GlassType.ROCKS,
     "Sazerac": GlassType.ROCKS,
@@ -1677,6 +1677,17 @@ CLASSIC_GLASSES: dict[str, GlassType] = {
     "Rusty Nail": GlassType.ROCKS,
 }
 
+
+#: Classici spostati di bicchiere da una revisione, con il bicchiere di
+#: prima. Con il cubo grosso contato per il suo volume (125 ml, ADR-0013),
+#: Penicillin e Gold Rush non entrano nel tumbler basso generico da 300 ml:
+#: si servono nel doppio, come fanno molti bar. Il seed sposta solo le
+#: ricette che hanno ancora il bicchiere di prima: una scelta fatta a mano
+#: resta.
+SUPERSEDED_GLASSES: dict[str, GlassType] = {
+    "Gold Rush": GlassType.ROCKS,
+    "Penicillin": GlassType.ROCKS,
+}
 
 # Kir non compare: è vino bianco e cassis, senza bollicine né amaro, e la
 # famiglia è facoltativa proprio per non forzare un'etichetta falsa. Nessun
@@ -1772,17 +1783,21 @@ async def seed_recipes(session: AsyncSession, catalogue: dict[str, Ingredient]) 
             glass = CLASSIC_GLASSES.get(name)
             family = CLASSIC_FAMILIES.get(name)
             # Bicchiere e famiglia sono facoltativi: il seed li imposta solo
-            # dove mancano, così non sovrascrive una scelta fatta a mano.
+            # dove mancano, così non sovrascrive una scelta fatta a mano. Fa
+            # eccezione un bicchiere che una revisione ha sostituito, finché
+            # la ricetta ha ancora quello.
+            moved = stored.glass is not None and SUPERSEDED_GLASSES.get(name) is stored.glass
             if (
                 stored.serving_ice is not serving_ice
                 or (stored.glass is None and glass is not None)
                 or (stored.family is None and family is not None)
+                or moved
             ):
                 await repository.save(
                     replace(
                         stored,
                         serving_ice=serving_ice,
-                        glass=stored.glass if stored.glass is not None else glass,
+                        glass=glass if moved or stored.glass is None else stored.glass,
                         family=stored.family if stored.family is not None else family,
                     )
                 )

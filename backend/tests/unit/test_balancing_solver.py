@@ -25,7 +25,7 @@ from app.domain.entities import Ingredient, Recipe, RecipeIngredient
 from app.domain.enums import DilutionMethod, GlassType, ServingIce
 from app.domain.errors import SolverError
 from app.domain.services.balance_calculator import calculate_balance
-from app.domain.services.glassware import max_serving_volume_ml
+from app.domain.services.glassware import recipe_volume_cap_ml
 
 
 @pytest.fixture
@@ -324,10 +324,10 @@ class TestGlassCapacity:
     def test_the_final_volume_is_capped_at_the_glass_capacity(
         self, solver: BalancingSolver, unbalanced_daiquiri: Recipe
     ) -> None:
-        """Il punto di partenza (~140 ml) non entra in un bicchierino da 60 ml:
+        """Il punto di partenza (~140 ml) non entra in un bicchierino da 50 ml:
         il solver, che da solo non avrebbe motivo di scendere, ci deve entrare."""
         glass = replace(unbalanced_daiquiri, glass=GlassType.SHOT)
-        limit = max_serving_volume_ml(GlassType.SHOT, ServingIce.NONE)
+        limit = recipe_volume_cap_ml(glass)
         assert limit is not None
         assert calculate_balance(glass).final_volume_ml > limit, "il test presuppone l'overflow"
 

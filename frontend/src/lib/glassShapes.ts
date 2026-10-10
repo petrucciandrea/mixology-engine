@@ -1,4 +1,4 @@
-import type { GlassType } from "@/types/api";
+import type { GlassModel, GlassType } from "@/types/api";
 
 /**
  * Sagome dei bicchieri come solidi di rotazione.
@@ -95,15 +95,64 @@ const SHAPES: Record<GlassType, GlassShape> = {
   OTHER: GENERIC_SHAPE,
 };
 
-/** L'ingombro verticale del bicchiere più alto, coppa più stelo: la flûte.
-    Il disegno grande lo usa come tetto comune, così i bicchieri restano in
+/** Scala comune del disegno grande, in unità del viewBox per millimetro.
+    È una sola per tutti i bicchieri di tutti i cataloghi: passando da una
+    coppa a una flûte si vede la differenza vera, non due sagome adattate
+    allo stesso riquadro. Il valore fa stare il bicchiere più alto dei
+    cataloghi (~260 mm) nello spazio della flûte stilizzata. */
+export const PX_PER_MM = 0.68;
+
+/** Il bicchiere più alto che il disegno deve contenere, in mm. */
+const TALLEST_GLASS_MM = 260;
+
+/** L'ingombro verticale del bicchiere più alto, coppa più stelo. Il
+    disegno grande lo usa come tetto comune, così i bicchieri restano in
     scala fra loro senza spazio vuoto sopra il più alto. */
 export const TALLEST_GLASS_PX = Math.max(
+  TALLEST_GLASS_MM * PX_PER_MM,
   ...[GENERIC_SHAPE, ...Object.values(SHAPES)].map((shape) => shape.heightPx + shape.stemPx),
 );
 
+/** Sagoma stilizzata per tipo: le icone dei bicchieri e il disegno quando
+    il bicchiere non ha misure (`OTHER`, o nessuno). */
 export function shapeFor(glass: GlassType | null): GlassShape {
   return glass === null ? GENERIC_SHAPE : SHAPES[glass];
+}
+
+/** Piede di un bicchiere a stelo rispetto al diametro massimo: le schede
+    non lo danno, ed è solo disegno. */
+const FOOT_TO_DIAMETER = 0.72;
+
+const modelShapes = new WeakMap<GlassModel, GlassShape>();
+
+/**
+ * La sagoma vera di un bicchiere di catalogo, dal profilo calcolato dal
+ * backend: coppa, stelo e larghezze in millimetri, alla scala comune.
+ * Nessuna geometria qui: si interpolano i diametri ricevuti. La sagoma è
+ * memorizzata per modello, così resta la stessa fra un render e l'altro e
+ * la trasformazione fra bicchieri parte dalla sagoma giusta.
+ */
+export function shapeForModel(model: GlassModel): GlassShape {
+  const cached = modelShapes.get(model);
+  if (cached !== undefined) return cached;
+
+  const profile = model.profile_mm;
+  const widest = Math.max(...profile);
+  const last = profile.length - 1;
+  const shape: GlassShape = {
+    heightPx: model.depth_mm * PX_PER_MM,
+    widthPx: widest * PX_PER_MM,
+    stemPx: model.stem_mm * PX_PER_MM,
+    footPx: model.stem_mm > 0 ? model.diameter_mm * FOOT_TO_DIAMETER * PX_PER_MM : 0,
+    width: (t) => {
+      const position = Math.min(Math.max(t, 0), 1) * last;
+      const index = Math.min(Math.floor(position), last - 1);
+      const share = position - index;
+      return (profile[index]! + (profile[index + 1]! - profile[index]!) * share) / widest;
+    },
+  };
+  modelShapes.set(model, shape);
+  return shape;
 }
 
 /** Sagoma intermedia fra due bicchieri, `progress` in [0, 1]. Serve solo a
