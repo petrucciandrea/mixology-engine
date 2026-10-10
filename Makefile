@@ -76,8 +76,14 @@ fe-lint: ## Controlla lo stile del frontend con ESLint
 fe-typecheck: ## Type-check TypeScript in modalita' strict
 	$(COMPOSE) exec frontend npm run typecheck
 
+# La build gira in un container usa e getta, non in quello di `next dev`:
+# entrambi scrivono in `.next`, e una build nel container vivo ne
+# sovrascrive la cache, che il server di sviluppo non ritrova più
+# ("__webpack_modules__[moduleId] is not a function"). Il container nuovo ha
+# un volume anonimo suo per `.next` (e per `node_modules`), che `--rm`
+# elimina alla fine.
 fe-build: ## Build di produzione Next.js (verifica che compili davvero)
-	$(COMPOSE) exec frontend npm run build
+	$(COMPOSE) run --rm --no-deps frontend npm run build
 
 fe-shell: ## Apre una shell nel container frontend
 	$(COMPOSE) exec frontend bash
