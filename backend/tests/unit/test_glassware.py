@@ -19,8 +19,10 @@ from app.domain.services.glassware import (
     GLASS_CAPACITY_ML,
     USABLE_FILL_FRACTION,
     assess_glass_fit,
+    glass_catalogue,
     max_serving_volume_ml,
 )
+from app.domain.serving_geometry import compatible_ices
 
 #: Tutti i bicchieri con una capienza nota, cioè tutti tranne `OTHER`.
 SIZED_GLASSES = [glass for glass in GlassType if glass is not GlassType.OTHER]
@@ -88,7 +90,9 @@ class TestInvariants:
     def test_ice_never_raises_the_cap(self, glass: GlassType) -> None:
         neat = max_serving_volume_ml(glass, ServingIce.NONE)
         assert neat is not None
-        for ice in (ServingIce.CUBES, ServingIce.LARGE_CUBE, ServingIce.CRUSHED):
+        for ice in ServingIce:
+            if ice is ServingIce.NONE:
+                continue
             iced = max_serving_volume_ml(glass, ice)
             assert iced is not None
             assert iced < neat
@@ -145,3 +149,23 @@ class TestAssessGlassFit:
         # e insieme al drink massimo fanno il volume utile, 315 ml.
         assert fit.ice_volume_ml == pytest.approx(110.25)
         assert fit.max_volume_ml + fit.ice_volume_ml == pytest.approx(315.0)
+
+
+class TestGlassCatalogue:
+    """Il catalogo è ciò che serve all'editor per scegliere bicchiere e
+    ghiaccio senza conoscere la geometria: capienza e ghiacci ammessi."""
+
+    def test_lists_every_glass_in_enum_order(self) -> None:
+        assert [spec.glass for spec in glass_catalogue()] == list(GlassType)
+
+    def test_carries_capacity_and_compatible_ice(self) -> None:
+        by_glass = {spec.glass: spec for spec in glass_catalogue()}
+
+        collins = by_glass[GlassType.COLLINS]
+        assert collins.capacity_ml == GLASS_CAPACITY_ML[GlassType.COLLINS]
+        assert collins.compatible_ice == compatible_ices(GlassType.COLLINS)
+        assert ServingIce.LARGE_CUBE not in collins.compatible_ice
+
+        other = by_glass[GlassType.OTHER]
+        assert other.capacity_ml is None
+        assert other.compatible_ice == tuple(ServingIce)

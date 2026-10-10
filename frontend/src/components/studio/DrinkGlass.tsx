@@ -64,12 +64,16 @@ const VIEW_HEIGHT = VIEW_BOTTOM - VIEW_TOP;
 const CENTRE_X = VIEW_WIDTH / 2;
 const OUTLINE = "#4a5852";
 
-/** Lato del cubetto, in unità del viewBox, a ghiaccio intatto. */
+/** Lato del cubetto, in unità del viewBox, a ghiaccio intatto. Per la
+    colonna è il lato della sezione; l'altezza è `SPEAR_ASPECT` volte tanto,
+    come il pezzo da 30 × 120 mm del backend. */
 const ICE_SIZE: Record<Exclude<ServingIce, "NONE">, number> = {
   CUBES: 24,
   LARGE_CUBE: 52,
   CRUSHED: 8,
+  SPEAR: 28,
 };
+const SPEAR_ASPECT = 4;
 
 /** Pseudo-casuale deterministico: il ghiaccio non deve ridisporsi a ogni
     render, o tremerebbe mentre si muove uno slider. */
@@ -277,6 +281,8 @@ function iceCubes(
   top: number,
   bowlBottom: number,
 ): ReactNode[] {
+  if (iceType === "SPEAR") return [iceSpear(shape, remaining, top, bowlBottom)];
+
   const cubes: ReactNode[] = [];
   const size = ICE_SIZE[iceType] * Math.cbrt(Math.max(0.05, remaining));
   const ceiling = Math.min(Math.max(top + (size * 0.45) / shape.heightPx, 0.12), 0.97);
@@ -327,6 +333,47 @@ function iceCubes(
     y -= side * 0.9;
   }
   return cubes;
+}
+
+/**
+ * La colonna: un pezzo solo, in piedi sul fondo. Fonde restando simile a
+ * se stessa, come nel modello termico, quindi sezione e altezza calano
+ * insieme con la radice cubica della quota rimasta. La parte sopra il
+ * liquido si disegna più opaca, come per i cubetti.
+ */
+function iceSpear(shape: GlassShape, remaining: number, top: number, bowlBottom: number): ReactNode {
+  const scale = Math.cbrt(Math.max(0.05, remaining));
+  const height = Math.min(ICE_SIZE.SPEAR * SPEAR_ASPECT * scale, shape.heightPx * 0.97);
+  const span = shape.width(Math.min(1, height / shape.heightPx)) * shape.widthPx;
+  const side = Math.min(ICE_SIZE.SPEAR * scale, span * 0.7);
+  const x = CENTRE_X - side / 2;
+  const y = bowlBottom - 1 - height;
+  // Quota del pelo libero, limitata alla colonna: sopra è ghiaccio emerso.
+  const waterline = Math.min(Math.max(bowlBottom - top * shape.heightPx, y), y + height);
+  return (
+    <g key="ice-spear" transform={`rotate(-2 ${CENTRE_X} ${bowlBottom})`}>
+      <rect x={x} y={y} width={side} height={waterline - y} fill="#dcebf0" fillOpacity={0.2} />
+      <rect
+        x={x}
+        y={waterline}
+        width={side}
+        height={y + height - waterline}
+        fill="#dcebf0"
+        fillOpacity={0.13}
+      />
+      <rect
+        x={x}
+        y={y}
+        width={side}
+        height={height}
+        rx={side * 0.18}
+        fill="none"
+        stroke="#e6f1f5"
+        strokeOpacity={0.5}
+        strokeWidth={0.8}
+      />
+    </g>
+  );
 }
 
 /** Bollicine per spritz e sparkling: salgono dal fondo fino al livello. */

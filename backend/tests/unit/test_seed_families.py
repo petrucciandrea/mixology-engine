@@ -1,8 +1,10 @@
-"""La classificazione dei classici del seed deve restare coerente col catalogo."""
+"""Classificazione e servizio dei classici del seed coerenti col catalogo."""
 
 from __future__ import annotations
 
-from scripts.seed import CLASSIC_FAMILIES, CLASSICS
+from scripts.seed import CLASSIC_FAMILIES, CLASSIC_GLASSES, CLASSICS
+
+from app.domain.serving_geometry import ice_fits
 
 
 def test_every_classified_recipe_exists_in_the_catalogue() -> None:
@@ -10,3 +12,14 @@ def test_every_classified_recipe_exists_in_the_catalogue() -> None:
     # famiglia in silenzio.
     names = {name for name, *_ in CLASSICS}
     assert set(CLASSIC_FAMILIES) <= names
+
+
+def test_every_classic_is_served_with_ice_that_fits_its_glass() -> None:
+    # La ricetta rifiuterebbe la coppia al momento del seed, su un database
+    # vero; qui l'incoerenza emerge prima, senza database.
+    misfits = [
+        (name, CLASSIC_GLASSES.get(name), ice)
+        for name, _, ice, *_ in CLASSICS
+        if not ice_fits(CLASSIC_GLASSES.get(name), ice)
+    ]
+    assert misfits == []

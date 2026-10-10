@@ -39,10 +39,21 @@ const METHOD_OPTIONS: SegmentedOption<DilutionMethod>[] = DILUTION_METHODS.map((
   label: DILUTION_METHOD_LABELS[method],
 }));
 
-const ICE_OPTIONS: SegmentedOption<ServingIce>[] = SERVING_ICES.map((ice) => ({
-  value: ice,
-  label: SERVING_ICE_LABELS[ice],
-}));
+/** I ghiacci, con quelli che il bicchiere non accoglie disabilitati. "Senza
+    ghiaccio" occupa da solo la prima riga: è la scelta opposta a tutte le
+    altre, che sotto stanno a coppie. */
+function iceOptions(allowed: readonly ServingIce[]): SegmentedOption<ServingIce>[] {
+  return SERVING_ICES.map((ice) => {
+    const fits = allowed.includes(ice);
+    return {
+      value: ice,
+      label: SERVING_ICE_LABELS[ice],
+      disabled: !fits,
+      title: fits ? undefined : "Non entra in questo bicchiere",
+      className: ice === "NONE" ? "col-span-2" : undefined,
+    };
+  });
+}
 
 /** La griglia dei bicchieri, compresa la scelta "nessuno": tutti visibili,
     perché la forma si riconosce prima del nome. */
@@ -66,6 +77,9 @@ interface DosePanelProps {
   doses: Dose[];
   method: DilutionMethod;
   servingIce: ServingIce;
+  /** Ghiacci che il bicchiere scelto accoglie; gli altri restano visibili
+      ma disabilitati. */
+  allowedIce: readonly ServingIce[];
   glass: GlassType | null;
   family: RecipeFamily | null;
   glassFit: GlassFit | null;
@@ -82,6 +96,7 @@ export function DosePanel({
   doses,
   method,
   servingIce,
+  allowedIce,
   glass,
   family,
   glassFit,
@@ -113,7 +128,7 @@ export function DosePanel({
         />
         <Segmented
           ariaLabel="Servizio"
-          options={ICE_OPTIONS}
+          options={iceOptions(allowedIce)}
           value={servingIce}
           onChange={onServingIceChange}
           className={`${SEGMENT_GROUP} grid-cols-2`}

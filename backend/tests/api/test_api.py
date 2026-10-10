@@ -515,6 +515,48 @@ class TestRecipesApi:
 
         assert response.status_code == 422
 
+    async def test_ice_that_does_not_fit_the_glass_is_rejected(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        base = daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20))
+        payload = {**base, "glass": "COLLINS", "serving_ice": "LARGE_CUBE"}
+
+        for response in (
+            await client.post(f"{API}/recipes", json=payload),
+            await client.post(f"{API}/balance", json=payload),
+        ):
+            assert response.status_code == 422
+            assert response.json()["error"]["type"] == "IceDoesNotFitGlassError"
+
+    async def test_a_spear_is_served_in_a_collins(
+        self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
+    ) -> None:
+        base = daiquiri_payload(rum_id, lime_id, syrup_id, (60, 30, 20))
+        payload = {**base, "glass": "COLLINS", "serving_ice": "SPEAR"}
+        response = await client.post(f"{API}/balance", json=payload)
+
+        assert response.status_code == 200
+        serving = response.json()["serving_profile"]
+        # Un pezzo unico pesa quanto il pezzo: 30 × 30 × 120 mm a 0.917 g/ml.
+        assert serving["ice_mass_g"] == pytest.approx(108.0 * 0.917)
+        assert serving["ambient_heat_j"] > 0
+        assert serving["freezing_point_c"] < 0
+
+    async def test_glassware_lists_capacity_and_the_ice_each_glass_takes(
+        self, client: AsyncClient
+    ) -> None:
+        response = await client.get(f"{API}/glassware")
+
+        assert response.status_code == 200
+        by_glass = {item["glass"]: item for item in response.json()}
+        assert by_glass["ROCKS"] == {
+            "glass": "ROCKS",
+            "capacity_ml": 350.0,
+            "compatible_ice": ["NONE", "CUBES", "LARGE_CUBE", "CRUSHED"],
+        }
+        assert "SPEAR" in by_glass["COLLINS"]["compatible_ice"]
+        assert by_glass["OTHER"]["capacity_ml"] is None
+
     async def test_glass_is_a_closed_vocabulary(
         self, client: AsyncClient, rum_id: str, lime_id: str, syrup_id: str
     ) -> None:

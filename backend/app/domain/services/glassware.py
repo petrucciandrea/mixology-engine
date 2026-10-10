@@ -15,6 +15,10 @@ ipotesi dichiarate, da tarare come quelle del ghiaccio di servizio:
    drink classici notoriamente "pieni" (Garibaldi, Cuba Libre) e va rivisto
    con misure reali.
 
+La geometria del bicchiere (misure, e quindi quali ghiacci ci entrano) sta
+in `serving_geometry`, perché anche l'aggregate `Recipe` la consulta; qui
+il catalogo la mette accanto alla capienza per chi deve scegliere.
+
 Limiti dichiarati: la capienza è un valore tipico per tipo di bicchiere
 (le misure reali variano per produttore), e l'acqua di fusione del ghiaccio
 di servizio che si aggiunge dopo non è conteggiata — sta nel bordo libero.
@@ -28,6 +32,7 @@ from typing import Final
 
 from ..entities import Recipe
 from ..enums import GlassType, ServingIce
+from ..serving_geometry import compatible_ices
 
 #: Capienza a filo bordo, in ml, per un bicchiere tipico del tipo.
 GLASS_CAPACITY_ML: Final[dict[GlassType, float]] = {
@@ -102,4 +107,26 @@ def assess_glass_fit(recipe: Recipe, volume_ml: float) -> GlassFit | None:
         max_volume_ml=max_volume,
         ice_volume_ml=capacity * USABLE_FILL_FRACTION - max_volume,
         volume_ml=volume_ml,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class GlassSpec:
+    """Un bicchiere come lo vede chi compone: capienza e ghiacci che accoglie."""
+
+    glass: GlassType
+    #: `None` per `OTHER`, che non ha capienza nota.
+    capacity_ml: float | None
+    compatible_ice: tuple[ServingIce, ...]
+
+
+def glass_catalogue() -> tuple[GlassSpec, ...]:
+    """Tutti i bicchieri, nell'ordine dell'enum."""
+    return tuple(
+        GlassSpec(
+            glass=glass,
+            capacity_ml=GLASS_CAPACITY_ML.get(glass),
+            compatible_ice=compatible_ices(glass),
+        )
+        for glass in GlassType
     )

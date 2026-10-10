@@ -33,6 +33,15 @@ class InvalidRecipeError(DomainError):
     """La ricetta è strutturalmente invalida (vuota, o con duplicati)."""
 
 
+class IceDoesNotFitGlassError(InvalidRecipeError):
+    """Il ghiaccio di servizio non entra nel bicchiere della ricetta.
+
+    Sottoclasse di `InvalidRecipeError` perché è la stessa categoria di
+    errore (una ricetta che non si può servire), ma con un nome proprio: il
+    client può riconoscerla dal `type` e proporre un ghiaccio compatibile.
+    """
+
+
 class EntityNotFoundError(DomainError):
     """L'entità richiesta non esiste nel repository."""
 

@@ -116,22 +116,27 @@ class ServingProfile:
     servizio. Tenerli distinti evita che un'ipotesi sul tempo di consumo
     sposti i target di bilanciamento.
 
-    Le grandezze intermedie (temperatura, acqua da raffreddamento e da
-    calore ambiente) ci sono per lo stesso motivo del `BalanceProfile`:
-    rendere il calcolo verificabile a mano.
+    Le grandezze intermedie (temperature, calore entrato dall'ambiente) ci
+    sono per lo stesso motivo del `BalanceProfile`: rendere il calcolo
+    verificabile a mano. Con queste la legge di conservazione del modello,
+    `(C₀ + m·c_w)·T + L·m − C₀·T_s = Q_amb`, si controlla da fuori.
     """
 
     consumption_minutes: float
 
     # --- Termodinamica ---
+    #: Temperatura di servizio: il punto di congelamento per shaken e
+    #: stirred, l'ambiente per un built.
     initial_temperature_c: float
-    equilibrium_temperature_c: float
     #: Temperatura del drink a `consumption_minutes`.
     temperature_c: float
+    #: Punto di congelamento della miscela diluita: la temperatura verso cui
+    #: il ghiaccio spinge il drink finché ce n'è.
+    freezing_point_c: float
+    #: Calore entrato dall'ambiente attraverso il vetro, cumulato.
+    ambient_heat_j: float
 
     # --- Acqua di fusione aggiunta dal ghiaccio di servizio ---
-    cooling_melt_water_ml: float
-    ambient_melt_water_ml: float
     melt_water_ml: float
 
     # --- Ghiaccio nel bicchiere ---

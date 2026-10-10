@@ -31,18 +31,20 @@ Ogni ingrediente ha i seguenti parametri:
 - **Brix Post-Diluizione:** $Brix_{post} = \left(\frac{M_{sugar}}{M_{tot} + V_{h2o}}\right) \cdot 100$
 - **Acidità Post-Diluizione (% p/v):** $\text{Acidity}_{post} = \left(\frac{M_{acid}}{V_{final}}\right) \cdot 100$
 
-## 4. Diluizione da ghiaccio di servizio (bilancio termico)
-Vale solo per le ricette con `serving_ice ≠ NONE` ed è un profilo **separato** (`ServingProfile`), calcolato dopo $t$ minuti di consumo (default 10, massimo 60). Le curve di Arnold non lo coprono: è un bilancio di calore, con ipotesi dichiarate in `domain/services/serving_dilution.py`.
+## 4. Diluizione da ghiaccio di servizio (bilancio termico a due nodi)
+Vale solo per le ricette con `serving_ice ≠ NONE` ed è un profilo **separato** (`ServingProfile`), calcolato dopo $t$ minuti di consumo (default 10, massimo 60). Le curve di Arnold non lo coprono: è un bilancio di calore, con ipotesi dichiarate in `domain/services/serving_dilution.py` (ADR-0012).
 
-- **Punto di congelamento (legge crioscopica ideale):** $T_f = -K_f \cdot \dfrac{n_{EtOH} + n_{saccarosio}}{m_{H_2O}\,[kg]}$, con $K_f = 1.86$ K·kg/mol, saturato a −40 °C.
-- **Raffreddamento fino all'equilibrio:** $m_{eq}\,(L - c_w\,|T_f|) = M\,c_p\,(T_s - T_f)$, con $L = 334$ J/g; $T_f$ dipende da $m_{eq}$ (si risolve per bisezione). $T_s = T_f$ per shaken/stirred (già raffreddati: termine nullo), $T_s = 20$ °C per built.
-- **Cinetica (il tipo di ghiaccio entra qui):** $m_{cool}(t) = m_{eq}\,(1 - e^{-t/\tau})$, con $\tau = \dfrac{M\,c_p}{h\,A}$, $A = (S/V)_{tipo}\cdot V_{ghiaccio}$. Superfici specifiche $S/V = 6/a$: cubetti 25 mm, cubo grosso 50 mm, tritato ~6 mm.
-- **Calore ambiente:** $m_{amb}(t) = P\,t / L$, con $P = 6$ W.
-- **Totale:** $V_{serving} = V_{final} + m_{cool} + m_{amb}$, limitato al ghiaccio disponibile ($V_{ghiaccio} = V_{final}$); ABV, Brix e acidità si ricalcolano sulle nuove masse e volumi. Il ghiaccio residuo è $m_{ghiaccio} - m_{cool} - m_{amb}$.
-- **Temperatura:** $T(t) = T_f(m_w + m_{eq} + m_{amb}(t)) + (T_s - T_{eq})\,e^{-t/\tau}$. Il transitorio decade con la stessa $\tau$ della fusione da raffreddamento; il primo termine è l'equilibrio che si sposta perché l'acqua di fusione ambiente diluisce la miscela. A $t = 0$ vale $T_s$; per shaken/stirred il transitorio è nullo e il drink si scalda lentamente seguendo la diluizione. Esaurito il ghiaccio, il riscaldamento verso l'ambiente non è modellato.
-- **Curva di servizio:** lo stesso profilo campionato ogni minuto da $t = 0$ (il drink appena servito) a 30 minuti; accompagna ogni risposta di `/balance` come `serving_curve`.
+- **Punto di congelamento (legge crioscopica ideale):** $T_f = -K_f \cdot \dfrac{n_{EtOH} + n_{saccarosio}}{m_{H_2O}\,[kg]}$, con $K_f = 1.86$ K·kg/mol, saturato a −40 °C. Si ricalcola a ogni istante sull'acqua del drink più quella di fusione.
+- **Ghiaccio:** pezzi da `domain/serving_geometry.py` (prismi a base quadrata: cubetti 25 mm, cubo grosso 50 mm, tritato ~6 mm, colonna 30 × 30 × 120 mm). Cubetti e tritato riempiono: $V_{ghiaccio} = V_{final}$. Cubo grosso e colonna sono un pezzo unico: $V_{ghiaccio} = V_{pezzo}$. Superficie iniziale $A_0 = (S/V)_{tipo}\cdot V_{ghiaccio}$; durante la fusione $A = A_0\,(m_{ghiaccio}/m_0)^{2/3}$.
+- **Due nodi, un percorso (ambiente → drink → ghiaccio):** $C\,\dfrac{dT}{dt} = U\,(T_a - T) - h\,A\,(T - T_f) - \dot m\,c_w\,(T - T_f)$, con $\dot m = \dfrac{h\,A\,(T - T_f)}{L - c_w\,|T_f|}$ e $C = C_0 + m\,c_w$. Il tipo di ghiaccio entra solo da $A$. Esaurito il ghiaccio resta $C\,\dfrac{dT}{dt} = U\,(T_a - T)$.
+- **Temperatura di servizio:** $T_s = T_f$ per shaken/stirred (escono all'equilibrio), $T_s = T_a = 20$ °C per built.
+- **Conservazione dell'entalpia** (riferimento: acqua liquida a 0 °C): $(C_0 + m\,c_w)\,T + L\,m = C_0\,T_s + Q_{amb}$, con $Q_{amb} = \int U\,(T_a - T)\,dt$ (`ambient_heat_j`).
+- **Integrazione:** passo di 1 s su griglia fissa dall'istante del servizio. A coefficienti congelati nel passo, $T$ segue l'esponenziale esatto verso $T_\infty = \dfrac{U\,T_a + (h\,A + \dot m\,c_w)\,T_f}{U + h\,A + \dot m\,c_w}$ (stabile per qualunque passo), $Q_{amb}$ il suo integrale in forma chiusa, e $m$ si ricava dalla conservazione. La fusione non decresce né supera il ghiaccio; se il passo la porterebbe fuori, si ferma al limite e $T$ si ricava dalla stessa entalpia.
+- **Regime quasi stazionario** (drink freddo sul ghiaccio): $T - T_f \approx \dfrac{U\,(T_a - T)}{h\,A + \dot m\,c_w}$. Con poca superficie il drink resta più caldo, richiama meno calore e fonde meno.
+- **Totale:** $V_{serving} = V_{final} + m$; ABV, Brix e acidità si ricalcolano sulle nuove masse e volumi. Il ghiaccio residuo è $m_0 - m$.
+- **Curva di servizio:** lo stesso modello campionato ogni minuto da $t = 0$ (il drink appena servito) a 30 minuti; accompagna ogni risposta di `/balance` come `serving_curve`.
 
-Ipotesi tarabili (non costanti fisiche): $h = 300$ W/m²K, $P = 6$ W, volume di ghiaccio = volume del drink, dimensioni caratteristiche dei tipi di ghiaccio, ghiaccio a 0 °C, superficie costante durante la fusione.
+Ipotesi tarabili (non costanti fisiche): $h = 300$ W/m²K, $U = 0.3$ W/K, $T_a = 20$ °C, volume di ghiaccio di riempimento = volume del drink, dimensioni dei pezzi, ghiaccio a 0 °C, nessun ghiaccio che si riforma, nessuno scambio diretto fra il ghiaccio emerso e l'aria.
 
 ## 5. Bicchiere di servizio e capienza
 `Recipe.glass` è un `GlassType` **facoltativo**. Se presente e con capienza nota (tutto tranne `OTHER`), pone un tetto al volume del drink servito. Ipotesi dichiarate in `domain/services/glassware.py`:
@@ -53,3 +55,9 @@ Ipotesi tarabili (non costanti fisiche): $h = 300$ W/m²K, $P = 6$ W, volume di 
 - **Riempimento:** $\text{fill} = V_{final} / V_{max}$; oltre 1 il drink trabocca (`GlassFit.overflows`).
 
 Limiti: capienze tipiche, non misure di produttore; $s$ tarato su drink classici serviti pieni; l'acqua di fusione che si aggiunge dopo il servizio sta nel bordo libero.
+
+**Compatibilità ghiaccio–bicchiere** (`domain/serving_geometry.py`, ADR-0012). Il bicchiere è un tronco di cono (diametro del fondo $d$, della bocca $D$, profondità $H$; per calice e balloon $d$ è la pancia), con larghezza $w(z) = d + (D - d)\,z/H$; le misure si accordano con le capienze entro il 10%. Un pezzo di lato $a$ e altezza $h_p$ entra se
+
+$$h_p \le H \quad\text{e}\quad \min\big(D,\; w(H - h_p)\big) \ge a\sqrt{2} + 4\ \text{mm}$$
+
+cioè non sporge e, appoggiato col bordo superiore a filo, la sezione ne contiene la diagonale più il gioco. È un'invariante di `Recipe` (`IceDoesNotFitGlassError`); senza bicchiere, o con `OTHER`, nessun ghiaccio è escluso. `GET /api/v1/glassware` espone capienza e ghiacci compatibili per bicchiere.

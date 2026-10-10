@@ -42,6 +42,10 @@ class ServingIce(str, Enum):
     CUBES = "CUBES"
     LARGE_CUBE = "LARGE_CUBE"
     CRUSHED = "CRUSHED"
+    #: Colonna di ghiaccio per i bicchieri alti e stretti (Collins, highball).
+    #: È un tipo a sé e non una variante del cubo: geometria, superficie e
+    #: bicchieri che la accolgono sono diversi (vedi `serving_geometry`).
+    SPEAR = "SPEAR"
 
 
 class GlassType(str, Enum):

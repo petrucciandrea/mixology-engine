@@ -163,10 +163,9 @@ class ServingProfileOut(BaseModel):
 
     consumption_minutes: float
     initial_temperature_c: float
-    equilibrium_temperature_c: float
     temperature_c: float
-    cooling_melt_water_ml: float
-    ambient_melt_water_ml: float
+    freezing_point_c: float
+    ambient_heat_j: float
     melt_water_ml: float
     ice_mass_g: float
     remaining_ice_g: float
@@ -183,10 +182,9 @@ class ServingProfileOut(BaseModel):
         return cls(
             consumption_minutes=profile.consumption_minutes,
             initial_temperature_c=profile.initial_temperature_c,
-            equilibrium_temperature_c=profile.equilibrium_temperature_c,
             temperature_c=profile.temperature_c,
-            cooling_melt_water_ml=profile.cooling_melt_water_ml,
-            ambient_melt_water_ml=profile.ambient_melt_water_ml,
+            freezing_point_c=profile.freezing_point_c,
+            ambient_heat_j=profile.ambient_heat_j,
             melt_water_ml=profile.melt_water_ml,
             ice_mass_g=profile.ice_mass_g,
             remaining_ice_g=profile.remaining_ice_g,

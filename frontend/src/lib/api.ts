@@ -10,6 +10,7 @@
 import type {
   BalanceResponse,
   FlavorDescriptors,
+  GlassSpec,
   Ingredient,
   IngredientCategory,
   Page,
@@ -162,6 +163,12 @@ export function updateRecipe(recipeId: string, recipe: RecipeInput): Promise<Rec
 
 export function deleteRecipe(recipeId: string): Promise<void> {
   return request<void>(`/recipes/${encodeURIComponent(recipeId)}`, { method: "DELETE" });
+}
+
+// --- Bicchieri ---------------------------------------------------------------
+
+export function listGlassware(): Promise<GlassSpec[]> {
+  return request<GlassSpec[]>("/glassware");
 }
 
 // --- Bilanciamento ----------------------------------------------------------
