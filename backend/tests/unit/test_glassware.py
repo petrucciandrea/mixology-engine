@@ -1,10 +1,11 @@
 """Bicchieri: volume utile e verifica del riempimento.
 
 I valori attesi sono calcolati a mano dalle ipotesi dichiarate: bordo
-libero del 10% (`USABLE_FILL_FRACTION`) e, con ghiaccio di servizio, una
-quota di spazio utile occupata dal ghiaccio (`ICE_SHARE_OF_USABLE_VOLUME`
-= 0.35), per cui il drink ne occupa il 65%. La capienza è quella del
-bicchiere nel catalogo della ricetta.
+libero del 10% (`USABLE_FILL_FRACTION`); con cubetti o tritato una quota
+di spazio utile occupata dal ghiaccio (`ICE_SHARE_OF_USABLE_VOLUME` =
+0.35), per cui il drink ne occupa il 65%; con un pezzo unico il volume del
+pezzo, che sta tutto nel bicchiere. La capienza è quella del bicchiere nel
+catalogo della ricetta.
 """
 
 from __future__ import annotations
@@ -57,6 +58,16 @@ class TestMaxServingVolume:
         highball = GENERIC.models[GlassType.HIGHBALL]
         # 350 × 0.9 × (1 − 0.35) = 204.75 ml di drink.
         assert max_serving_volume_ml(highball, ServingIce.CUBES) == pytest.approx(204.75)
+
+    def test_a_single_piece_takes_its_own_volume(self) -> None:
+        """Il cubo grosso non si impila con vuoti: è un solido da 125 ml, e
+        sta tutto sotto il bordo (la compatibilità lo garantisce)."""
+        rocks = GENERIC.models[GlassType.ROCKS]
+        # 300 × 0.9 − 50³ mm³ = 270 − 125 = 145 ml di drink.
+        assert max_serving_volume_ml(rocks, ServingIce.LARGE_CUBE) == pytest.approx(145.0)
+        collins = GENERIC.models[GlassType.COLLINS]
+        # 400 × 0.9 − 30 × 30 × 120 mm³ = 360 − 108 = 252 ml.
+        assert max_serving_volume_ml(collins, ServingIce.SPEAR) == pytest.approx(252.0)
 
     def test_the_cap_follows_the_catalogue(self, daiquiri: Recipe) -> None:
         """Lo stesso tipo, due linee, due capienze: è il motivo per cui la
@@ -119,6 +130,14 @@ class TestAssessGlassFit:
         # Tumbler basso generico 300 ml: 300 × 0.9 × 0.35 = 94.5 ml di
         # ghiaccio, e insieme al drink massimo fanno il volume utile, 270 ml.
         assert fit.ice_volume_ml == pytest.approx(94.5)
+        assert fit.max_volume_ml + fit.ice_volume_ml == pytest.approx(270.0)
+
+    def test_a_large_cube_shows_its_true_volume(self, daiquiri: Recipe) -> None:
+        rocks = replace(daiquiri, glass=GlassType.ROCKS, serving_ice=ServingIce.LARGE_CUBE)
+        fit = assess_glass_fit(rocks, 100.0)
+
+        assert fit is not None
+        assert fit.ice_volume_ml == pytest.approx(125.0)
         assert fit.max_volume_ml + fit.ice_volume_ml == pytest.approx(270.0)
 
     def test_uses_the_catalogue_of_the_recipe(self, daiquiri: Recipe) -> None:

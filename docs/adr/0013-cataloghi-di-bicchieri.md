@@ -2,9 +2,10 @@
 
 **Stato:** accettata
 **Sostituisce:** la tabella delle capienze di ADR-0009 (punto 3, la
-capienza come costante per tipo) e la geometria a tronco di cono di
-ADR-0012 (punto 4). Restano validi il bordo libero e la quota di ghiaccio
-di ADR-0009, la regola di compatibilità e l'invariante di ADR-0012.
+capienza come costante per tipo), la quota di ghiaccio di ADR-0009 per i
+pezzi unici, e la geometria a tronco di cono di ADR-0012 (punto 4).
+Restano validi il bordo libero e la quota per cubetti e tritato di
+ADR-0009, la regola di compatibilità e l'invariante di ADR-0012.
 
 ## Contesto
 
@@ -82,6 +83,24 @@ alla bozza aperta, con gli stessi ripieghi del cambio di bicchiere.
 Lo studio li disegna a **una scala comune in mm**, ghiaccio compreso, invece
 di sagome proprie: le sagome stilizzate restano solo per le icone e per i
 bicchieri senza misure.
+
+### 5. Il pezzo unico occupa il suo volume
+
+Lo spazio del ghiaccio nel bicchiere era il 35% del volume utile per ogni
+tipo. Per cubetti e tritato è una quota tarata (si impilano lasciando
+vuoti, e il pezzo che sporge sopra il livello sposta meno di quanto pesa).
+Per il pezzo unico è sbagliata: il cubo grosso è un solido da 125 ml che,
+per la regola di compatibilità, sta tutto sotto il bordo. In un tumbler
+generico da 300 ml la quota gli dava 94.5 ml, e un drink che sembrava
+entrare traboccava.
+
+Cubo grosso e colonna sottraggono ora il loro volume vero
+(`services/glassware.ice_space_ml`). La verifica di tutti i classici del
+seed nel loro bicchiere, che ADR-0009 citava ma non era nel repository,
+diventa un test: ha spostato Penicillin e Gold Rush (176 e 162 ml contro i
+145 che restano accanto al cubo) nel doppio tumbler, dove molti bar li
+servono. Il seed li sposta solo se la ricetta salvata ha ancora il
+tumbler basso.
 
 ## Conseguenze
 

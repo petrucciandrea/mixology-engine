@@ -51,11 +51,11 @@ Ipotesi tarabili (non costanti fisiche): $h = 300$ W/m²K, $U = 0.3$ W/K, $T_a =
 
 - **Capienza:** quella dichiarata dalla scheda del bicchiere nel catalogo (`GlassModel.capacity_ml`, a colmo).
 - **Volume utile:** $V_{util} = C \cdot 0.9$ (bordo libero del 10%).
-- **Con ghiaccio di servizio** il solido occupa una quota $s = 0.35$ dello spazio utile: $V_{max} = V_{util}\,(1 - s)$, $V_{ghiaccio} = V_{util}\,s$ (`GlassFit.ice_volume_ml`). Senza ghiaccio $V_{max} = V_{util}$ e $V_{ghiaccio} = 0$.
+- **Spazio del ghiaccio** (`GlassFit.ice_volume_ml`): per cubetti e tritato una quota $s = 0.35$ dello spazio utile, $V_{ghiaccio} = V_{util}\,s$; per il pezzo unico il suo volume, $V_{ghiaccio} = V_{pezzo}$ (cubo grosso 125 ml, colonna 108 ml), che per la regola di compatibilità sta tutto sotto il bordo. Senza ghiaccio $V_{ghiaccio} = 0$. In ogni caso $V_{max} = V_{util} - V_{ghiaccio}$.
 - **Vincolo:** $V_{final} \le V_{max}$ (disuguaglianza SLSQP, normalizzata su $V_{max}$). Se è presente anche il target `final_volume_ml` (uguaglianza) e $V_{target} > V_{max}$ il problema è `INFEASIBLE`.
 - **Riempimento:** $\text{fill} = V_{final} / V_{max}$; oltre 1 il drink trabocca (`GlassFit.overflows`).
 
-Limiti: $s$ tarato su drink classici serviti pieni e uguale per ogni tipo di ghiaccio; l'acqua di fusione che si aggiunge dopo il servizio sta nel bordo libero.
+Limiti: $s$ tarato su drink classici serviti pieni (vale per il ghiaccio che riempie); l'acqua di fusione che si aggiunge dopo il servizio sta nel bordo libero.
 
 **Profilo del bicchiere** (`domain/serving_geometry.py`, ADR-0013). Un bicchiere è un solido di rotazione con profilo $d(t) = D \cdot f(t)$, $t \in [0, 1]$ dal fondo della coppa alla bocca, dove $f$ è la curva della famiglia di forma (massimo 1) e $D$ il diametro massimo interno, quello della scheda meno due pareti da 2 mm. La profondità si ricava dalla capienza dichiarata:
 
