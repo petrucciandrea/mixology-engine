@@ -21,6 +21,10 @@
   (`serving_curve`) e riempimento arrivano da `/balance`. Lato client
   restano solo rappresentazione (`lib/flavor.ts`, interpolazioni dei
   disegni in `useTweenedVolumes` e `useGlassShape`).
+- I ghiacci compatibili con ciascun bicchiere arrivano da `/glassware`
+  (`lib/serving.ts`): lo studio disabilita gli altri e, cambiando
+  bicchiere, sostituisce un ghiaccio che non entra più (cubetti, se no
+  senza ghiaccio). La geometria resta al backend.
 
 Prossimo pezzo aperto: vista a rete del grafo dei sapori (D3) sopra
 `/match/graph` e `/match/bridge`, già pronti.
