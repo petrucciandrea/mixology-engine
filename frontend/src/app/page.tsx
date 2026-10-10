@@ -15,7 +15,8 @@ import { StudioHeader } from "@/components/studio/StudioHeader";
 import { useRecipe } from "@/hooks/useRecipe";
 import { useRecipeBook } from "@/hooks/useRecipeBook";
 import { useSolver } from "@/hooks/useSolver";
-import { ApiError, listIngredients } from "@/lib/api";
+import { ApiError, listGlassware, listIngredients } from "@/lib/api";
+import { allowedIce, fallbackIce, toCatalogue, type GlassCatalogue } from "@/lib/serving";
 import type {
   DilutionMethod,
   GlassType,
@@ -39,6 +40,16 @@ export default function StudioPage() {
     doses: recipe.doses,
     onApply: recipe.applyVolumes,
   });
+
+  // Il catalogo dei bicchieri dice quali ghiacci ciascuno accoglie. Se non
+  // arriva non si blocca nulla: l'editor resta usabile, e una coppia
+  // impossibile la rifiuta il backend con un errore leggibile.
+  const [glassware, setGlassware] = useState<GlassCatalogue | null>(null);
+  useEffect(() => {
+    listGlassware()
+      .then((specs) => setGlassware(toCatalogue(specs)))
+      .catch(() => setGlassware(null));
+  }, []);
 
   useEffect(() => {
     listIngredients({ limit: 200 })
@@ -99,12 +110,18 @@ export default function StudioPage() {
     },
     [invalidate, setServingIce],
   );
+  // Cambiare bicchiere può lasciare un ghiaccio che non ci entra (il cubo
+  // grosso passando al Collins): lo si sostituisce subito, invece di
+  // mandare al backend una ricetta che rifiuterebbe.
+  const currentIce = recipe.servingIce;
   const changeGlass = useCallback(
     (glass: GlassType | null) => {
       invalidate();
+      const allowed = allowedIce(glassware, glass);
+      if (!allowed.includes(currentIce)) setServingIce(fallbackIce(allowed));
       setGlass(glass);
     },
-    [invalidate, setGlass],
+    [invalidate, setGlass, setServingIce, glassware, currentIce],
   );
 
   function loadRecipe(target: Recipe) {
@@ -228,6 +245,7 @@ export default function StudioPage() {
           doses={recipe.doses}
           method={recipe.method}
           servingIce={recipe.servingIce}
+          allowedIce={allowedIce(glassware, recipe.glass)}
           glass={recipe.glass}
           family={recipe.family}
           glassFit={recipe.glassFit}

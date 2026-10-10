@@ -31,14 +31,19 @@ export const DILUTION_METHOD_LABELS: Record<DilutionMethod, string> = {
  * Ghiaccio nel bicchiere di servizio. Indipendente dalla tecnica: un
  * Daiquiri è shakerato e servito senza ghiaccio, un Whiskey Sour è
  * shakerato e servito su cubetti. `NONE` è "servito senza ghiaccio".
+ * `SPEAR` è la colonna per i bicchieri alti e stretti. Il ghiaccio deve
+ * entrare nel bicchiere: il backend rifiuta la coppia con
+ * `IceDoesNotFitGlassError`, e `GlassSpec.compatible_ice` dice prima
+ * quali ghiacci ogni bicchiere accoglie.
  */
-export type ServingIce = "NONE" | "CUBES" | "LARGE_CUBE" | "CRUSHED";
+export type ServingIce = "NONE" | "CUBES" | "LARGE_CUBE" | "CRUSHED" | "SPEAR";
 
 export const SERVING_ICES: readonly ServingIce[] = [
   "NONE",
   "CUBES",
   "LARGE_CUBE",
   "CRUSHED",
+  "SPEAR",
 ] as const;
 
 export const SERVING_ICE_LABELS: Record<ServingIce, string> = {
@@ -46,6 +51,7 @@ export const SERVING_ICE_LABELS: Record<ServingIce, string> = {
   CUBES: "Cubetti",
   LARGE_CUBE: "Ghiaccio grosso",
   CRUSHED: "Tritato",
+  SPEAR: "Colonna",
 };
 
 /**
@@ -272,12 +278,16 @@ export type SourBalance = "TOO_TART" | "BALANCED" | "TOO_SWEET";
  */
 export interface ServingProfile {
   consumption_minutes: number;
+  /** Temperatura di servizio: punto di congelamento per shaken e stirred,
+      ambiente per un built. */
   initial_temperature_c: number;
-  equilibrium_temperature_c: number;
   /** Temperatura del drink a `consumption_minutes`. */
   temperature_c: number;
-  cooling_melt_water_ml: number;
-  ambient_melt_water_ml: number;
+  /** Punto di congelamento della miscela diluita: dove il ghiaccio spinge
+      il drink finché ce n'è. */
+  freezing_point_c: number;
+  /** Calore entrato dall'ambiente attraverso il vetro, cumulato, in J. */
+  ambient_heat_j: number;
   melt_water_ml: number;
   /** Ghiaccio messo nel bicchiere, e quanto ne resta a `consumption_minutes`. */
   ice_mass_g: number;
@@ -289,6 +299,14 @@ export interface ServingProfile {
   abv_percent: number;
   brix: number;
   acidity: number;
+}
+
+/** Un bicchiere del catalogo (`GET /glassware`): capienza, `null` se
+    ignota, e i ghiacci che ci entrano senza sporgere né incastrarsi. */
+export interface GlassSpec {
+  glass: GlassType;
+  capacity_ml: number | null;
+  compatible_ice: ServingIce[];
 }
 
 /** Quanto il drink riempie il bicchiere; `fill_ratio` oltre 1 = trabocca. */
