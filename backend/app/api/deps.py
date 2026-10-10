@@ -25,6 +25,7 @@ from app.application.use_cases.balancing import (
     OptimizeRecipeUseCase,
     OptimizeStoredRecipeUseCase,
 )
+from app.application.use_cases.glassware import ListGlasswareUseCase
 from app.application.use_cases.ingredients import (
     CreateIngredientUseCase,
     DeleteIngredientUseCase,
@@ -227,3 +228,7 @@ def get_find_bridge_use_case(
 
 def get_describe_graph_use_case(provider: GraphProviderDep) -> DescribeFlavorGraphUseCase:
     return DescribeFlavorGraphUseCase(provider)
+
+
+def get_list_glassware_use_case() -> ListGlasswareUseCase:
+    return ListGlasswareUseCase()

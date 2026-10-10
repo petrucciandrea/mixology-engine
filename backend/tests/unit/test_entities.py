@@ -12,8 +12,15 @@ from app.domain.entities import (
     Recipe,
     RecipeIngredient,
 )
-from app.domain.enums import DilutionMethod, IngredientCategory, RecipeFamily, ServingIce
+from app.domain.enums import (
+    DilutionMethod,
+    GlassType,
+    IngredientCategory,
+    RecipeFamily,
+    ServingIce,
+)
 from app.domain.errors import (
+    IceDoesNotFitGlassError,
     InvalidPhysicalProfileError,
     InvalidRecipeError,
     InvalidVolumeError,
@@ -130,6 +137,33 @@ class TestRecipe:
                 serving_ice=ServingIce.NONE,
                 ingredients=(RecipeIngredient(ingredient=white_rum, volume_ml=30.0),),
             )
+
+
+class TestRecipeServing:
+    """Il ghiaccio di servizio deve entrare nel bicchiere: è un'invariante
+    dell'aggregate, come l'assenza di duplicati, perché una ricetta servita
+    in un modo fisicamente impossibile non è una ricetta valida."""
+
+    def test_a_large_cube_cannot_be_served_in_a_collins(self, daiquiri: Recipe) -> None:
+        with pytest.raises(IceDoesNotFitGlassError, match="LARGE_CUBE.*COLLINS"):
+            replace(daiquiri, glass=GlassType.COLLINS, serving_ice=ServingIce.LARGE_CUBE)
+
+    def test_a_spear_cannot_be_served_in_a_rocks_glass(self, daiquiri: Recipe) -> None:
+        with pytest.raises(IceDoesNotFitGlassError):
+            replace(daiquiri, glass=GlassType.ROCKS, serving_ice=ServingIce.SPEAR)
+
+    def test_the_error_is_a_recipe_error(self) -> None:
+        """Chi gestisce le ricette invalide in blocco (l'API, con un 422) non
+        deve conoscere il caso particolare."""
+        assert issubclass(IceDoesNotFitGlassError, InvalidRecipeError)
+
+    def test_a_spear_in_a_collins_is_valid(self, daiquiri: Recipe) -> None:
+        collins = replace(daiquiri, glass=GlassType.COLLINS, serving_ice=ServingIce.SPEAR)
+        assert collins.serving_ice is ServingIce.SPEAR
+
+    def test_without_a_glass_any_ice_is_valid(self, daiquiri: Recipe) -> None:
+        for ice in ServingIce:
+            assert replace(daiquiri, glass=None, serving_ice=ice).serving_ice is ice
 
 
 class TestRecipeFamily:

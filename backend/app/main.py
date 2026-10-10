@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.errors import register_exception_handlers
 from app.api.routes.balancing import router as balancing_router
+from app.api.routes.glassware import router as glassware_router
 from app.api.routes.health import router as health_router
 from app.api.routes.ingredients import router as ingredients_router
 from app.api.routes.matching import router as matching_router
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(ingredients_router, prefix=settings.api_v1_prefix)
     app.include_router(recipes_router, prefix=settings.api_v1_prefix)
     app.include_router(balancing_router, prefix=settings.api_v1_prefix)
+    app.include_router(glassware_router, prefix=settings.api_v1_prefix)
     app.include_router(matching_router, prefix=settings.api_v1_prefix)
 
     @app.get("/", tags=["root"])

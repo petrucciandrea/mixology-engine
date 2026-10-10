@@ -17,8 +17,14 @@ from dataclasses import dataclass, replace
 from typing import Final
 
 from .enums import DilutionMethod, GlassType, IngredientCategory, RecipeFamily, ServingIce
-from .errors import InvalidPhysicalProfileError, InvalidRecipeError, InvalidVolumeError
+from .errors import (
+    IceDoesNotFitGlassError,
+    InvalidPhysicalProfileError,
+    InvalidRecipeError,
+    InvalidVolumeError,
+)
 from .flavor import FlavorProfile
+from .serving_geometry import ice_fits
 
 # ---------------------------------------------------------------------------
 # Limiti fisici del dominio.
@@ -130,10 +136,13 @@ class Recipe:
     fisico, solo nel giudizio sul rapporto zuccheri/acidi, che vale per i
     sour (`assess_sour_balance`).
 
-    L'invariante che protegge è la coerenza del dosaggio — nessuna ricetta
-    vuota, nessun ingrediente ripetuto (due dosi dello stesso ingrediente
-    sono una sola dose sommata, e tenerle separate renderebbe ambiguo il
-    risultato del solver, che assegna un volume per posizione).
+    Le invarianti che protegge sono la coerenza del dosaggio — nessuna
+    ricetta vuota, nessun ingrediente ripetuto (due dosi dello stesso
+    ingrediente sono una sola dose sommata, e tenerle separate renderebbe
+    ambiguo il risultato del solver, che assegna un volume per posizione) —
+    e quella del servizio: il ghiaccio deve entrare nel bicchiere
+    (`serving_geometry.ice_fits`). Un cubo grosso in un Collins non è una
+    scelta di stile discutibile, è un drink che non si può servire.
     """
 
     id: str
@@ -161,6 +170,12 @@ class Recipe:
                     "merge the doses into a single entry"
                 )
             seen.add(item.ingredient.id)
+
+        if not ice_fits(self.glass, self.serving_ice):
+            raise IceDoesNotFitGlassError(
+                f"serving ice {self.serving_ice.value} does not fit glass "
+                f"{self.glass.value if self.glass is not None else None}"
+            )
 
     @property
     def volumes_ml(self) -> tuple[float, ...]:
